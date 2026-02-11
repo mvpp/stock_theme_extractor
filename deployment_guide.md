@@ -6,25 +6,26 @@ This guide covers deploying the `stock_themes` system end-to-end: from a fresh m
 
 ---
 
-## 0. Bug Fix — `pyproject.toml` build backend (MUST DO FIRST)
+## 0. What is this
 
-The current `pyproject.toml` has an incorrect build backend that causes:
-```
-pip._vendor.pyproject_hooks._impl.BackendUnavailable: Cannot import 'setuptools.backends._legacy'
-```
+This is Python library that generates investment themes for all US stocks and stores them in a SQLite database.
 
-**File:** `pyproject.toml`
+Data pipeline (per ticker):
 
-**Change:** Replace line 22:
-```toml
-# BEFORE (broken):
-build-backend = "setuptools.backends._legacy:_Backend"
+- Yahoo Finance → sector, industry, business summary, market cap
+- SEC EDGAR with fallback chain: 10-Q (quarterly) → 10-K (annual) → S-1 (IPO) — ensures we always get the freshest business description
+- PatentsView API — free, no rate limits. Searches patents by company name, extracts CPC codes that map to technology themes (AI, 5G, semiconductors, etc.)
+- GDELT DOC 2.0 API — free, no rate limits. Gets recent news article themes and tone for each company
+- StockTwits API — free, no auth. Gets sentiment scores and trending discussion topics per ticker. Run a daily async job to accumulate ~1,000 messages/month per ticker, then filter for neutral/positive sentiment before theme extraction.
 
-# AFTER (correct):
-build-backend = "setuptools.build_meta"
-```
+Sentence transformer pre-filtering: Before sending text to the LLM, chunk all collected text, compute cosine similarity against a master taxonomy of 200+ themes using sentence transformers, and only keep chunks with similarity > 0.6. This dramatically reduces LLM input tokens and improves relevance.
 
-The `setuptools.backends._legacy:_Backend` is an internal pip fallback that was never meant to be used in `pyproject.toml`. The standard backend is `setuptools.build_meta`.
+Theme extraction (3 strategies):
+
+- SIC Mapper — rule-based lookup from SIC codes (all stocks, free)
+- Keyword Extractor — ~25 regex patterns against business text (all stocks, free)
+- Kimi K2.5 LLM — nuanced extraction via Moonshot API (large caps only, ~$5 total for 4,000 stocks)
+- Database: SQLite with stocks, themes, and stock_themes tables enabling queries like "all AI stocks" or "all themes for AAPL".
 
 ---
 

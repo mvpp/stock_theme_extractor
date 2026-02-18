@@ -16,7 +16,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 LLM_PROVIDERS = {
     "kimi": {
         "base_url": "https://api.moonshot.ai/v1",
-        "model": "kimi-k2-5",
+        "model": "kimi-k2.5",
         "env_key": "MOONSHOT_API_KEY",
     },
     "minimax": {

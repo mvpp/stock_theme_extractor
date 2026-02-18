@@ -109,12 +109,17 @@ class LLMExtractor:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=1,
+                temperature=0.6,
                 max_tokens=600,
+                extra_body={"thinking": {"type": "disabled"}},
             )
             content = response.choices[0].message.content
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
+            return []
+
+        if not content or not content.strip():
+            logger.warning("LLM returned empty content")
             return []
 
         try:
@@ -133,6 +138,6 @@ class LLMExtractor:
             if isinstance(parsed, list):
                 return parsed
         except (json.JSONDecodeError, IndexError) as e:
-            logger.warning(f"Failed to parse LLM response: {e}")
+            logger.warning(f"Failed to parse LLM response: {e}\nRaw content: {content[:500]}")
 
         return []

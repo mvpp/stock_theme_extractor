@@ -58,6 +58,13 @@ LLM_DELAY_SECONDS = 0.5  # delay between LLM calls
 SEC_RATE_LIMIT_DELAY = 0.15  # ~7 req/sec, under 10 req/sec SEC limit
 YAHOO_RATE_LIMIT_DELAY = 0.5
 
+# Browser-like User-Agent for non-yfinance HTTP requests
+# (yfinance itself uses curl_cffi with impersonate="chrome" internally)
+FAKE_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 # Cache TTLs (hours)
 YAHOO_CACHE_TTL_HOURS = 24
 SEC_10K_CACHE_TTL_HOURS = 168  # 1 week

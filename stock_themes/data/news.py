@@ -6,6 +6,7 @@ import logging
 
 import requests
 
+from stock_themes.config import FAKE_USER_AGENT
 from stock_themes.exceptions import ProviderError
 from stock_themes.models import CompanyProfile
 
@@ -41,7 +42,8 @@ class GDELTProvider:
                 "format": "json",
                 "sort": "datedesc",
             }
-            resp = requests.get(GDELT_DOC_API, params=params, timeout=30)
+            headers = {"User-Agent": FAKE_USER_AGENT}
+            resp = requests.get(GDELT_DOC_API, params=params, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:

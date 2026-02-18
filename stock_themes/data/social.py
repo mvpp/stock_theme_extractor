@@ -8,7 +8,7 @@ from datetime import datetime
 
 import requests
 
-from stock_themes.config import STOCKTWITS_ACCESS_TOKEN
+from stock_themes.config import STOCKTWITS_ACCESS_TOKEN, FAKE_USER_AGENT
 from stock_themes.exceptions import ProviderError
 from stock_themes.models import CompanyProfile, SocialMessage
 from stock_themes.db.store import ThemeStore
@@ -29,7 +29,8 @@ class StockTwitsProvider:
         url = STOCKTWITS_API.format(ticker=ticker.upper())
         try:
             params = {"access_token": STOCKTWITS_ACCESS_TOKEN} if STOCKTWITS_ACCESS_TOKEN else {}
-            resp = requests.get(url, params=params, timeout=15)
+            headers = {"User-Agent": FAKE_USER_AGENT}
+            resp = requests.get(url, params=params, headers=headers, timeout=15)
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:

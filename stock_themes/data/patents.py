@@ -6,7 +6,7 @@ import logging
 
 import requests
 
-from stock_themes.config import PATENTSVIEW_API_KEY
+from stock_themes.config import PATENTSVIEW_API_KEY, FAKE_USER_AGENT
 from stock_themes.exceptions import ProviderError
 from stock_themes.models import CompanyProfile
 
@@ -59,7 +59,10 @@ class PatentsViewProvider:
                 "s": [{"patent_date": "desc"}],
             }
 
-            headers = {"X-Api-Key": PATENTSVIEW_API_KEY}
+            headers = {
+                "X-Api-Key": PATENTSVIEW_API_KEY,
+                "User-Agent": FAKE_USER_AGENT,
+            }
             resp = requests.post(PATENTSVIEW_API, json=params, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()

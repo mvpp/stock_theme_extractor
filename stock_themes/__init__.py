@@ -26,7 +26,7 @@ def get_themes(
     from stock_themes.extraction.ensemble import EnsembleExtractor
 
     pipeline = DataPipeline()
-    profile = pipeline.fetch(ticker)
+    profile = pipeline.fetch(ticker, db_path=db_path)
 
     extractor = EnsembleExtractor(use_llm=use_llm, max_themes=max_themes)
     result = extractor.extract(profile)

@@ -12,65 +12,120 @@ logger = logging.getLogger(__name__)
 
 
 class DataPipeline:
-    """Fetches data from all providers and merges into a single CompanyProfile."""
+    """Fetches data from all providers and merges into a single CompanyProfile.
+
+    Uses a two-pass approach:
+      Pass 1 — core providers (Yahoo Finance, SEC EDGAR) to get the company name.
+      Pass 2 — enrichment providers (PatentsView, GDELT, StockTwits) that need
+               the company name to query their APIs.
+    """
 
     def __init__(self, providers: list | None = None):
-        self.providers = providers or self._default_providers()
+        if providers is not None:
+            # Legacy: caller supplied a flat list — treat all as core providers
+            self.core_providers = providers
+            self.enrichment_providers = []
+        else:
+            self.core_providers, self.enrichment_providers = self._default_providers()
 
-    def _default_providers(self) -> list:
+    def _default_providers(self) -> tuple[list, list]:
+        """Return (core_providers, enrichment_providers)."""
         from stock_themes.data.yahoo import YahooFinanceProvider
         from stock_themes.data.sec_edgar import SECEdgarProvider
 
-        providers = []
-
+        core = []
         yahoo = YahooFinanceProvider()
         if yahoo.is_available():
-            providers.append(yahoo)
+            core.append(yahoo)
 
         edgar = SECEdgarProvider()
         if edgar.is_available():
-            providers.append(edgar)
+            core.append(edgar)
 
-        # Enrichment providers (optional)
+        enrichment = []
         try:
             from stock_themes.data.patents import PatentsViewProvider
-            providers.append(PatentsViewProvider())
+            enrichment.append(PatentsViewProvider())
         except ImportError:
             pass
 
         try:
             from stock_themes.data.news import GDELTProvider
-            providers.append(GDELTProvider())
+            enrichment.append(GDELTProvider())
         except ImportError:
             pass
 
-        return providers
+        try:
+            from stock_themes.data.social import StockTwitsProvider
+            enrichment.append(StockTwitsProvider())
+        except ImportError:
+            pass
 
-    def fetch(self, ticker: str) -> CompanyProfile:
-        """Fetch from all available providers and merge."""
-        profiles: list[CompanyProfile] = []
+        return core, enrichment
 
-        for provider in self.providers:
+    def fetch(self, ticker: str, db_path: str | None = None) -> CompanyProfile:
+        """Fetch from all providers and merge.
+
+        Args:
+            ticker: Stock ticker symbol.
+            db_path: If provided, StockTwits reads accumulated messages from
+                     this SQLite DB instead of making a live API call.
+        """
+        # --- Pass 1: core providers (Yahoo, EDGAR) ---
+        core_profiles: list[CompanyProfile] = []
+        for provider in self.core_providers:
             if not provider.is_available():
                 logger.info(f"Skipping {provider.name}: not available")
                 continue
             try:
                 profile = provider.fetch(ticker)
-                profiles.append(profile)
+                core_profiles.append(profile)
                 logger.info(f"Fetched {ticker} from {provider.name}")
             except Exception as e:
                 logger.warning(f"Provider {provider.name} failed for {ticker}: {e}")
 
-            # Respect rate limits
             if provider.name == "sec_edgar":
                 time.sleep(SEC_RATE_LIMIT_DELAY)
             elif provider.name == "yahoo_finance":
                 time.sleep(YAHOO_RATE_LIMIT_DELAY)
 
-        if not profiles:
-            raise RuntimeError(f"All providers failed for ticker '{ticker}'")
+        if not core_profiles:
+            raise RuntimeError(f"All core providers failed for ticker '{ticker}'")
 
-        return self._merge(ticker, profiles)
+        # Merge core profiles to get company name before enrichment
+        base = self._merge(ticker, core_profiles)
+
+        # --- Pass 2: enrichment providers (need company name) ---
+        enrichment_profiles: list[CompanyProfile] = []
+        for provider in self.enrichment_providers:
+            if not provider.is_available():
+                continue
+            try:
+                if provider.name == "stocktwits":
+                    if db_path:
+                        # Read accumulated monthly messages from DB
+                        from stock_themes.data.social import get_monthly_social_text
+                        social_text = get_monthly_social_text(db_path, ticker)
+                        if social_text:
+                            enrichment_profiles.append(CompanyProfile(
+                                ticker=ticker.upper(),
+                                name=base.name,
+                                social_text=social_text,
+                                data_sources=["stocktwits"],
+                            ))
+                    else:
+                        # Live fetch of today's 30 messages
+                        profile = provider.fetch(ticker)
+                        enrichment_profiles.append(profile)
+                else:
+                    # Patents and news need company name
+                    profile = provider.fetch(ticker, company_name=base.name)
+                    enrichment_profiles.append(profile)
+                logger.info(f"Fetched {ticker} from {provider.name}")
+            except Exception as e:
+                logger.warning(f"Provider {provider.name} failed for {ticker}: {e}")
+
+        return self._merge(ticker, [base] + enrichment_profiles)
 
     def _merge(self, ticker: str, profiles: list[CompanyProfile]) -> CompanyProfile:
         """Merge profiles: first non-None value wins for scalar fields,

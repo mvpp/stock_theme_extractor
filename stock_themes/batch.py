@@ -13,9 +13,6 @@ from stock_themes.config import (
     BATCH_SIZE,
 )
 from stock_themes.data.pipeline import DataPipeline
-from stock_themes.data.patents import PatentsViewProvider
-from stock_themes.data.news import GDELTProvider
-from stock_themes.data.social import get_monthly_social_text
 from stock_themes.extraction.ensemble import EnsembleExtractor
 from stock_themes.db.store import ThemeStore
 
@@ -63,23 +60,20 @@ def run_batch(
         stats["skipped"] = original_count - len(tickers_to_process)
         logger.info(f"Skipping {stats['skipped']} already-processed tickers")
 
-    # Set up pipeline and extractors
+    # Set up pipeline and extractor (reuse across tickers)
     pipeline = DataPipeline()
-    patents_provider = PatentsViewProvider()
-    news_provider = GDELTProvider()
+    extractor = EnsembleExtractor(use_llm=True, max_themes=max_themes_per_stock)
 
-    # Process in batches
+    # Process tickers
     for ticker in tqdm(tickers_to_process, desc="Processing stocks"):
         try:
             _process_single(
                 ticker=ticker,
                 pipeline=pipeline,
-                patents_provider=patents_provider,
-                news_provider=news_provider,
+                extractor=extractor,
                 store=store,
                 db_path=db_path,
-                max_themes=max_themes_per_stock,
-                use_llm=True,
+                llm_market_cap_threshold=llm_market_cap_threshold,
             )
             stats["processed"] += 1
         except Exception as e:
@@ -97,60 +91,24 @@ def run_batch(
 def _process_single(
     ticker: str,
     pipeline: DataPipeline,
-    patents_provider: PatentsViewProvider,
-    news_provider: GDELTProvider,
+    extractor: EnsembleExtractor,
     store: ThemeStore,
     db_path: str,
-    max_themes: int,
-    use_llm: bool,
+    llm_market_cap_threshold: float = LLM_MARKET_CAP_THRESHOLD,
 ) -> None:
     """Process a single ticker: fetch data, extract themes, save to DB."""
 
-    # 1. Core data (Yahoo + SEC EDGAR)
-    profile = pipeline.fetch(ticker)
+    # Fetch all data (two-pass: core providers then enrichment with company name)
+    # db_path lets StockTwits read accumulated monthly messages from the DB
+    profile = pipeline.fetch(ticker, db_path=db_path)
 
-    # 2. Enrichment: Patents
-    if profile.name:
-        try:
-            patent_data = patents_provider.fetch_with_name(ticker, profile.name)
-            profile.patent_titles = patent_data.patent_titles
-            profile.patent_cpc_codes = patent_data.patent_cpc_codes
-            profile.patent_count = patent_data.patent_count
-            if "patentsview" not in profile.data_sources:
-                profile.data_sources.append("patentsview")
-        except Exception as e:
-            logger.debug(f"{ticker}: PatentsView failed: {e}")
-
-    # 3. Enrichment: News
-    if profile.name:
-        try:
-            news_data = news_provider.fetch_with_name(ticker, profile.name)
-            profile.news_themes = news_data.news_themes
-            profile.news_titles = news_data.news_titles
-            profile.news_tone = news_data.news_tone
-            if "gdelt" not in profile.data_sources:
-                profile.data_sources.append("gdelt")
-        except Exception as e:
-            logger.debug(f"{ticker}: GDELT failed: {e}")
-
-    # 4. Enrichment: Social (from accumulated daily messages)
-    try:
-        social_text = get_monthly_social_text(db_path, ticker)
-        if social_text:
-            profile.social_text = social_text
-            if "stocktwits" not in profile.data_sources:
-                profile.data_sources.append("stocktwits")
-    except Exception as e:
-        logger.debug(f"{ticker}: Social text failed: {e}")
-
-    # 5. Extract themes
-    extractor = EnsembleExtractor(use_llm=use_llm, max_themes=max_themes)
+    # Extract themes
     result = extractor.extract(profile)
 
-    # 6. Save to database
+    # Save to database
     store.save_theme_result(result)
 
     # Rate limit for LLM calls
     market_cap = profile.market_cap or 0
-    if use_llm and market_cap >= LLM_MARKET_CAP_THRESHOLD:
+    if market_cap >= llm_market_cap_threshold:
         time.sleep(LLM_DELAY_SECONDS)

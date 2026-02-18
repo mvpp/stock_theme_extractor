@@ -102,6 +102,7 @@ class EnsembleExtractor:
         from stock_themes.extraction.patent_mapper import PatentMapper
         from stock_themes.extraction.embedding_matcher import EmbeddingMatcher
         from stock_themes.extraction.news_extractor import NewsExtractor
+        from stock_themes.extraction.social_extractor import SocialExtractor
         from stock_themes.extraction.llm_extractor import LLMExtractor
 
         extractors = [
@@ -109,6 +110,7 @@ class EnsembleExtractor:
             ("keyword", lambda: KeywordExtractor().extract(profile)),
             ("patent", lambda: PatentMapper().extract(profile)),
             ("news", lambda: NewsExtractor().extract(profile)),
+            ("social", lambda: SocialExtractor().extract(profile)),
         ]
 
         # Embedding matcher (uses pre-computed filter result)

@@ -14,9 +14,9 @@ Data pipeline (per ticker):
 
 - Yahoo Finance → sector, industry, business summary, market cap
 - SEC EDGAR with fallback chain: 10-Q (quarterly) → 10-K (annual) → S-1 (IPO) — ensures we always get the freshest business description
-- PatentsView API — free, no rate limits. Searches patents by company name, extracts CPC codes that map to technology themes (AI, 5G, semiconductors, etc.)
+- PatentsView API — requires free API key (`PATENTSVIEW_API_KEY`), 45 req/min. Searches patents by company name, extracts CPC codes that map to technology themes (AI, 5G, semiconductors, etc.)
 - GDELT DOC 2.0 API — free, no rate limits. Gets recent news article themes and tone for each company
-- StockTwits API — free, no auth. Gets sentiment scores and trending discussion topics per ticker. Run a daily async job to accumulate ~1,000 messages/month per ticker, then filter for neutral/positive sentiment before theme extraction.
+- StockTwits API — requires access token (`STOCKTWITS_ACCESS_TOKEN`, currently frozen — API registration paused). Gets sentiment scores and trending discussion topics per ticker. Run a daily async job to accumulate ~1,000 messages/month per ticker, then filter for neutral/positive sentiment before theme extraction.
 
 Sentence transformer pre-filtering: Before sending text to the LLM, chunk all collected text, compute cosine similarity against a master taxonomy of 200+ themes using sentence transformers, and only keep chunks with similarity > 0.6. This dramatically reduces LLM input tokens and improves relevance.
 
@@ -43,10 +43,16 @@ Theme extraction (3 strategies):
 
 | Key | Where to get it | Required? | Cost |
 |---|---|---|---|
-| `MOONSHOT_API_KEY` | [platform.moonshot.ai](https://platform.moonshot.ai) → Console → API Keys. Recharge at least $1 to activate. | Yes (for LLM extraction) | ~$5 for all stocks >$1B market cap |
+| `LLM_PROVIDER` | Set in `.env` — one of `kimi`, `minimax`, or `glm` | Optional (default: `kimi`) | — |
+| `MOONSHOT_API_KEY` | [platform.moonshot.ai](https://platform.moonshot.ai) → Console → API Keys. Recharge at least $1 to activate. | Yes if using Kimi | ~$5/month for all stocks >$1B |
+| `MINIMAX_API_KEY` | [platform.minimaxi.com](https://platform.minimaxi.com) → API Keys | Yes if using MiniMax | Similar |
+| `GLM_API_KEY` | [open.bigmodel.cn](https://open.bigmodel.cn) → API Keys | Yes if using GLM | Similar |
 | `SEC_EDGAR_EMAIL` | Any valid email you control. SEC requires a User-Agent identity. | Yes (for SEC filings) | Free |
+| `HF_TOKEN` | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) | Optional (avoids rate limits on model download) | Free |
+| `PATENTSVIEW_API_KEY` | [PatentsView Help Center](https://patentsview-support.atlassian.net/servicedesk/customer/portal/1/group/1/create/18) | Yes (for patent data) | Free (45 req/min) |
+| `STOCKTWITS_ACCESS_TOKEN` | [api.stocktwits.com/developers](https://api.stocktwits.com/developers) | Optional (API registration currently frozen) | Free |
 
-Without `MOONSHOT_API_KEY`, the system still works — it just skips LLM extraction and relies on the other 6 methods (embedding similarity, keyword NLP, patent mapping, news, SIC codes, social).
+Without any LLM API key, the system still works — it just skips LLM extraction. Without `PATENTSVIEW_API_KEY`, patent data is silently skipped. Without `STOCKTWITS_ACCESS_TOKEN`, social data is silently skipped. The system degrades gracefully — each missing key disables one data source while the rest continue working.
 
 ---
 
@@ -96,17 +102,47 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
+# LLM Provider: "kimi" (default), "minimax", or "glm"
+LLM_PROVIDER=kimi
+
+# API keys (only the one for your chosen LLM provider is needed)
 MOONSHOT_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+# MINIMAX_API_KEY=your_minimax_key_here
+# GLM_API_KEY=your_glm_key_here
+
 SEC_EDGAR_EMAIL=yourname@yourdomain.com
+
+# Optional but recommended
+HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxx
+
+# Required for patent data (request a free key — see API Keys table above)
+PATENTSVIEW_API_KEY=your_patentsview_key_here
+
+# StockTwits (currently frozen — leave blank until API reopens)
+# STOCKTWITS_ACCESS_TOKEN=
 ```
+
+### Switching LLM providers
+
+Just change two values in `.env`:
+```env
+# Switch to MiniMax:
+LLM_PROVIDER=minimax
+MINIMAX_API_KEY=your_minimax_key_here
+
+# Or switch to GLM:
+LLM_PROVIDER=glm
+GLM_API_KEY=your_glm_key_here
+```
+
+No code changes needed. Each provider has pre-configured base URL and model name.
 
 ### All tunable settings (`stock_themes/config.py`)
 
 | Setting | Default | What it controls |
 |---|---|---|
+| `LLM_PROVIDER` | `kimi` | Which LLM provider to use (`kimi`, `minimax`, `glm`) |
 | `LLM_MARKET_CAP_THRESHOLD` | `1e9` ($1B) | Stocks above this get LLM extraction |
-| `LLM_MODEL` | `kimi-k2-5` | Moonshot model identifier |
-| `LLM_BASE_URL` | `https://api.moonshot.ai/v1` | API endpoint |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | HuggingFace sentence-transformer model |
 | `SIMILARITY_THRESHOLD` | `0.6` | Cosine similarity cutoff for chunk pre-filtering |
 | `CHUNK_SIZE_WORDS` | `200` | Words per text chunk |
@@ -114,6 +150,14 @@ SEC_EDGAR_EMAIL=yourname@yourdomain.com
 | `LLM_DELAY_SECONDS` | `0.5` | Pause between LLM API calls |
 | `SEC_RATE_LIMIT_DELAY` | `0.15` | Pause between SEC API calls (~7 req/sec) |
 | `YAHOO_RATE_LIMIT_DELAY` | `0.5` | Pause between Yahoo Finance calls |
+
+### LLM Provider Presets
+
+| Provider | Model | Base URL | Env Key |
+|---|---|---|---|
+| `kimi` | `kimi-k2.5` | `https://api.moonshot.ai/v1` | `MOONSHOT_API_KEY` |
+| `minimax` | `MiniMax-Text-01` | `https://api.minimaxi.chat/v1` | `MINIMAX_API_KEY` |
+| `glm` | `glm-4-flash-250414` | `https://open.bigmodel.cn/api/paas/v4` | `GLM_API_KEY` |
 
 ---
 
@@ -140,8 +184,11 @@ for t in result.themes:
 5. PatentsView searches patents by assignee (~2s)
 6. GDELT fetches news themes (~2s)
 7. Text chunked, embedded, filtered (threshold > 0.6)
-8. All 7 extractors run (SIC, keyword, patent, embedding, news, LLM)
-9. Ensemble merges + ranks → `ThemeResult`
+8. All 7 extractors run (SIC, keyword, patent, embedding, news, social, LLM)
+9. Generic themes blocked (e.g., "company", "stock", "technology" are automatically filtered out)
+10. Ensemble merges + ranks → `ThemeResult`
+
+**Note:** PatentsView requires `PATENTSVIEW_API_KEY` — without it, patent data is silently skipped. StockTwits requires `STOCKTWITS_ACCESS_TOKEN` (currently frozen) — without it, social data is silently skipped. All other sources work without additional keys.
 
 **Expected output for AAPL** (themes will vary based on current filings):
 ```
@@ -454,14 +501,19 @@ stock_themes/
 | Problem | Cause | Fix |
 |---|---|---|
 | `BackendUnavailable: Cannot import 'setuptools.backends._legacy'` | Wrong build backend in `pyproject.toml` | Change `build-backend` to `"setuptools.build_meta"` (see Section 0) |
+| `unauthenticated requests to the HF Hub` | Missing HuggingFace token | Set `HF_TOKEN` in `.env` (get one at huggingface.co/settings/tokens) |
+| `PatentsView API failed: 403 Forbidden` | Missing PatentsView API key | Set `PATENTSVIEW_API_KEY` in `.env` (request at PatentsView Help Center) |
+| `StockTwits API failed: 403 Forbidden` | StockTwits API frozen / no token | Set `STOCKTWITS_ACCESS_TOKEN` when available; without it, social data is silently skipped |
+| `KeyError` on `LLM_PROVIDER` | Invalid provider name in `.env` | Use one of: `kimi`, `minimax`, `glm` |
 | `ModuleNotFoundError: torch` | PyTorch not installed | `pip install torch` |
 | `ProviderError: SEC EDGAR...` | edgartools can't reach SEC | Check internet; SEC may be down; increase `SEC_RATE_LIMIT_DELAY` |
 | `TickerNotFoundError` | Invalid or delisted ticker | Check ticker on Yahoo Finance; skip it |
-| LLM returns empty themes | Moonshot API key invalid/empty | Verify `MOONSHOT_API_KEY` in `.env`; check balance at platform.moonshot.ai |
+| LLM returns empty themes | API key invalid/empty for chosen provider | Verify the API key in `.env` for your `LLM_PROVIDER` |
 | `RuntimeError: All providers failed` | Both Yahoo + SEC failed for a ticker | Network issue or ticker not a US equity; logged and skipped in batch |
 | Batch is slow | Rate limiting is working correctly | Expected: ~7 req/sec for SEC, ~2/sec for Yahoo. Full run takes 6-36 hours. |
 | `torch.load` warning | PyTorch security change | Safe to ignore; we only load our own cached embeddings |
 | StockTwits returns 0 messages | Ticker has no StockTwits activity | Normal for small/micro-cap stocks; other extractors still work |
+| Generic themes in output | Blocklist may be missing a term | Add the term to `BLOCKED_THEMES` in `extraction/ensemble.py` |
 | High memory usage | Embedding model + large text chunks | Close other apps; or set `CHUNK_SIZE_WORDS` smaller |
 | DB locked | Multiple writers | SQLite WAL mode handles most cases. Don't run batch + social collector simultaneously on same DB file. |
 
@@ -477,5 +529,6 @@ stock_themes/
 | GDELT API | $0 |
 | StockTwits API | $0 |
 | Sentence-transformers (local CPU) | $0 |
-| Kimi K2.5 LLM (~4,000 stocks >$1B, pre-filtered chunks) | ~$5 |
+| HuggingFace (model download) | $0 |
+| LLM (~4,000 stocks >$1B, pre-filtered chunks) | ~$5 (varies by provider) |
 | **Total per month** | **~$5** |

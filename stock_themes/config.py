@@ -7,6 +7,15 @@ load_dotenv()
 # API keys
 SEC_EDGAR_EMAIL = os.environ.get("SEC_EDGAR_EMAIL", "stock_themes@example.com")
 
+# HuggingFace token (optional — speeds up model downloads, avoids rate limits)
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+
+# PatentsView API key (required for patent data)
+PATENTSVIEW_API_KEY = os.environ.get("PATENTSVIEW_API_KEY", "")
+
+# StockTwits access token (API currently frozen — set when available)
+STOCKTWITS_ACCESS_TOKEN = os.environ.get("STOCKTWITS_ACCESS_TOKEN", "")
+
 # Paths
 PROJECT_ROOT = Path(__file__).parent.parent
 CACHE_DIR = Path.home() / ".cache" / "stock_themes"

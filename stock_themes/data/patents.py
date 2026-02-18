@@ -6,6 +6,7 @@ import logging
 
 import requests
 
+from stock_themes.config import PATENTSVIEW_API_KEY
 from stock_themes.exceptions import ProviderError
 from stock_themes.models import CompanyProfile
 
@@ -18,7 +19,7 @@ class PatentsViewProvider:
     name = "patentsview"
 
     def is_available(self) -> bool:
-        return True
+        return bool(PATENTSVIEW_API_KEY)
 
     def fetch(self, ticker: str, company_name: str | None = None) -> CompanyProfile:
         """Search patents by company name (assignee).
@@ -58,7 +59,8 @@ class PatentsViewProvider:
                 "s": [{"patent_date": "desc"}],
             }
 
-            resp = requests.post(PATENTSVIEW_API, json=params, timeout=30)
+            headers = {"X-Api-Key": PATENTSVIEW_API_KEY}
+            resp = requests.post(PATENTSVIEW_API, json=params, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:

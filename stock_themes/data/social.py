@@ -8,6 +8,7 @@ from datetime import datetime
 
 import requests
 
+from stock_themes.config import STOCKTWITS_ACCESS_TOKEN
 from stock_themes.exceptions import ProviderError
 from stock_themes.models import CompanyProfile, SocialMessage
 from stock_themes.db.store import ThemeStore
@@ -21,13 +22,14 @@ class StockTwitsProvider:
     name = "stocktwits"
 
     def is_available(self) -> bool:
-        return True
+        return bool(STOCKTWITS_ACCESS_TOKEN)
 
     def fetch_messages(self, ticker: str) -> list[SocialMessage]:
         """Fetch latest 30 messages for a ticker from StockTwits."""
         url = STOCKTWITS_API.format(ticker=ticker.upper())
         try:
-            resp = requests.get(url, timeout=15)
+            params = {"access_token": STOCKTWITS_ACCESS_TOKEN} if STOCKTWITS_ACCESS_TOKEN else {}
+            resp = requests.get(url, params=params, timeout=15)
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:
@@ -109,6 +111,10 @@ def collect_daily(db_path: str, tickers: list[str]) -> dict[str, int]:
     from tqdm import tqdm
 
     provider = StockTwitsProvider()
+    if not provider.is_available():
+        logger.warning("StockTwits collection skipped: no access token configured")
+        return {}
+
     store = ThemeStore(db_path)
     results = {}
 

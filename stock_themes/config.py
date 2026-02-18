@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API keys
-MOONSHOT_API_KEY = os.environ.get("MOONSHOT_API_KEY", "")
 SEC_EDGAR_EMAIL = os.environ.get("SEC_EDGAR_EMAIL", "stock_themes@example.com")
 
 # Paths
@@ -13,9 +12,30 @@ PROJECT_ROOT = Path(__file__).parent.parent
 CACHE_DIR = Path.home() / ".cache" / "stock_themes"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# LLM settings
-LLM_BASE_URL = "https://api.moonshot.ai/v1"
-LLM_MODEL = "kimi-k2-5"
+# LLM provider presets (all OpenAI-compatible)
+LLM_PROVIDERS = {
+    "kimi": {
+        "base_url": "https://api.moonshot.ai/v1",
+        "model": "kimi-k2-5",
+        "env_key": "MOONSHOT_API_KEY",
+    },
+    "minimax": {
+        "base_url": "https://api.minimaxi.chat/v1",
+        "model": "MiniMax-Text-01",
+        "env_key": "MINIMAX_API_KEY",
+    },
+    "glm": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4-flash-250414",
+        "env_key": "GLM_API_KEY",
+    },
+}
+
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "kimi")
+_provider = LLM_PROVIDERS[LLM_PROVIDER]
+LLM_API_KEY = os.environ.get(_provider["env_key"], "")
+LLM_BASE_URL = _provider["base_url"]
+LLM_MODEL = _provider["model"]
 LLM_MARKET_CAP_THRESHOLD = 1e9  # $1B — stocks above this get LLM extraction
 
 # Semantic filter settings

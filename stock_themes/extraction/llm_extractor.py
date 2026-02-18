@@ -6,7 +6,7 @@ import json
 import logging
 import os
 
-from stock_themes.config import MOONSHOT_API_KEY, LLM_BASE_URL, LLM_MODEL
+from stock_themes.config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
 from stock_themes.models import CompanyProfile, Theme, ExtractionMethod
 from stock_themes.semantic.filter import FilterResult
 
@@ -37,7 +37,7 @@ class LLMExtractor:
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None,
                  model: str | None = None):
-        self.api_key = api_key or MOONSHOT_API_KEY
+        self.api_key = api_key or LLM_API_KEY
         self.base_url = base_url or LLM_BASE_URL
         self.model = model or LLM_MODEL
 

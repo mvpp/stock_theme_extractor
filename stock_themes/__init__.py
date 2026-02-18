@@ -15,7 +15,7 @@ def get_themes(
 
     Args:
         ticker: Stock ticker symbol (e.g., "AAPL").
-        use_llm: Whether to use LLM extraction (requires MOONSHOT_API_KEY).
+        use_llm: Whether to use LLM extraction (requires LLM API key for chosen provider).
         max_themes: Maximum themes to return.
         db_path: If provided, also save results to this SQLite database.
 

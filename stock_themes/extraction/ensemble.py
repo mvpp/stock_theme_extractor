@@ -26,6 +26,24 @@ SOURCE_WEIGHTS = {
 MULTI_SOURCE_BONUS = 0.05  # per additional confirming source
 MAX_MULTI_SOURCE_BONUS = 0.15
 
+# Generic terms that are too vague to be actionable investment themes.
+# These are filtered out during the merge-and-rank phase.
+BLOCKED_THEMES = {
+    # Generic corporate terms
+    "company", "corporation", "business", "enterprise", "firm", "organization",
+    # Generic financial terms
+    "stock", "share", "equity", "investment", "revenue", "profit", "earnings",
+    "dividend", "capital", "fund", "asset", "portfolio", "growth", "value",
+    "market", "trading", "securities", "financial", "fiscal", "monetary",
+    # Generic industry terms
+    "technology", "industry", "sector", "services", "products", "solutions",
+    "operations", "management", "strategy", "innovation", "development",
+    "research", "manufacturing", "consumer", "retail", "commercial",
+    # Other non-thematic noise
+    "global", "international", "domestic", "public", "private",
+    "large cap", "mid cap", "small cap", "blue chip",
+}
+
 
 class EnsembleExtractor:
     """Runs all extractors and produces a ranked, deduplicated theme list."""
@@ -132,6 +150,10 @@ class EnsembleExtractor:
 
         merged: list[Theme] = []
         for normalized_name, group in grouped.items():
+            if normalized_name in BLOCKED_THEMES:
+                logger.debug(f"Filtered generic theme: {normalized_name}")
+                continue
+
             sources = set(t.source for t in group)
             source_bonus = min(
                 MAX_MULTI_SOURCE_BONUS,

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.sec.gov)"
+      "WebFetch(domain:www.sec.gov)",
+      "Bash(python3 -m py_compile:*)"
     ]
   }
 }

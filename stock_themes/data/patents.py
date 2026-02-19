@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 import requests
@@ -45,25 +46,33 @@ class PatentsViewProvider:
         clean_name = self._clean_company_name(company_name)
 
         try:
-            params = {
-                "q": {"_contains": {"assignees.assignee_organization": clean_name}},
-                "f": [
+            # PatentsView API expects q/f/o/s as JSON-encoded query params
+            query_params = {
+                "q": json.dumps(
+                    {"_contains": {"assignees.assignee_organization": clean_name}}
+                ),
+                "f": json.dumps([
                     "patent_id",
                     "patent_title",
                     "patent_abstract",
                     "patent_date",
-                    "cpcs.cpc_group_id",
-                    "cpcs.cpc_subgroup_id",
-                ],
-                "o": {"per_page": 100},
-                "s": [{"patent_date": "desc"}],
+                    "cpc_at_issue.cpc_group_id",
+                    "cpc_at_issue.cpc_subclass_id",
+                ]),
+                "o": json.dumps({"size": 100}),
+                "s": json.dumps([{"patent_date": "desc"}]),
             }
 
             headers = {
                 "X-Api-Key": PATENTSVIEW_API_KEY,
                 "User-Agent": FAKE_USER_AGENT,
             }
-            resp = requests.post(PATENTSVIEW_API, json=params, headers=headers, timeout=30)
+            resp = requests.get(
+                PATENTSVIEW_API,
+                params=query_params,
+                headers=headers,
+                timeout=30,
+            )
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:
@@ -78,7 +87,7 @@ class PatentsViewProvider:
             if title:
                 titles.append(title)
 
-            cpcs = patent.get("cpcs", [])
+            cpcs = patent.get("cpc_at_issue", [])
             if isinstance(cpcs, list):
                 for cpc in cpcs:
                     group_id = cpc.get("cpc_group_id", "")

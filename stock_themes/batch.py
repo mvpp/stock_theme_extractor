@@ -50,6 +50,7 @@ def run_batch(
         tickers_to_process = [t.upper() for t in tickers]
 
     stats["total"] = len(tickers_to_process)
+    print(f"Discovered {stats['total']} US stock tickers")
     logger.info(f"Processing {len(tickers_to_process)} tickers")
 
     # Filter out already-processed tickers
@@ -81,6 +82,10 @@ def run_batch(
             stats["failed"] += 1
 
     store.close()
+    print(
+        f"Done: {stats['processed']} processed, "
+        f"{stats['failed']} failed, {stats['skipped']} skipped"
+    )
     logger.info(
         f"Batch complete: {stats['processed']} processed, "
         f"{stats['failed']} failed, {stats['skipped']} skipped"

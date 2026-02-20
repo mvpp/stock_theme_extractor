@@ -72,6 +72,7 @@ def discover_us_tickers() -> list[dict]:
                 sortField='intradaymarketcap',
                 sortAsc=False,
                 size=batch_size,
+                count=batch_size,  # must also set count to prevent yfinance default of 25
                 offset=offset,
             )
             quotes = response.get("quotes", [])
@@ -79,17 +80,32 @@ def discover_us_tickers() -> list[dict]:
                 break
 
             for q in quotes:
-                all_tickers.append({
-                    "ticker": q.get("symbol", ""),
-                    "name": q.get("shortName", ""),
-                    "market_cap": q.get("marketCap"),
-                    "exchange": q.get("exchange", ""),
-                })
+                sym = q.get("symbol", "")
+                # Keep only short tickers (≤4 chars) — filters out OTC/foreign
+                # tickers like ASMLF, TCEHY, TCTZF that are typically duplicates
+                if sym and len(sym) <= 4:
+                    all_tickers.append({
+                        "ticker": sym,
+                        "name": q.get("shortName", ""),
+                        "market_cap": q.get("marketCap"),
+                        "exchange": q.get("exchange", ""),
+                    })
+
+            total = response.get("total", response.get("count", None))
+            logger.info(
+                f"Screener page {offset // batch_size + 1}: "
+                f"got {len(quotes)} quotes, {len(all_tickers)} total so far"
+                + (f" (server total: {total})" if total else "")
+            )
 
             offset += batch_size
             time.sleep(YAHOO_RATE_LIMIT_DELAY)
 
+            # Stop if we got fewer results than requested (last page)
             if len(quotes) < batch_size:
+                break
+            # Stop if server tells us total and we've fetched them all
+            if total and offset >= total:
                 break
 
         logger.info(f"Discovered {len(all_tickers)} US tickers via screener")

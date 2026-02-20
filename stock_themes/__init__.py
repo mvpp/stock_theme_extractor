@@ -45,7 +45,7 @@ def build_database(
     llm_market_cap_threshold: float = 1e9,
     max_themes_per_stock: int = 10,
     skip_existing: bool = True,
-) -> None:
+) -> dict:
     """Build the full stock themes database for all US stocks.
 
     Args:
@@ -53,10 +53,20 @@ def build_database(
         llm_market_cap_threshold: Market cap threshold for LLM extraction.
         max_themes_per_stock: Max themes per stock.
         skip_existing: Skip tickers already in the database.
+
+    Returns:
+        Dict with batch statistics (processed, failed, skipped, total).
     """
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
     from stock_themes.batch import run_batch
 
-    run_batch(
+    return run_batch(
         db_path=db_path,
         llm_market_cap_threshold=llm_market_cap_threshold,
         max_themes_per_stock=max_themes_per_stock,

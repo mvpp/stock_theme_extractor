@@ -53,6 +53,21 @@ class ThemeStore:
         rows = self.conn.execute("SELECT ticker FROM stocks ORDER BY ticker").fetchall()
         return [row["ticker"] for row in rows]
 
+    def get_tickers_updated_since(self, since: str | None = None) -> list[str]:
+        """Return tickers updated on or after `since` (ISO date string, e.g. '2025-01-01').
+
+        When `since` is None, returns all tickers (same as get_all_tickers()).
+        Used by run_batch() to determine which tickers to skip during a refresh run:
+        tickers NOT in this set will be re-processed.
+        """
+        if since is None:
+            return self.get_all_tickers()
+        rows = self.conn.execute(
+            "SELECT ticker FROM stocks WHERE updated_at >= ? ORDER BY ticker",
+            (since,),
+        ).fetchall()
+        return [row["ticker"] for row in rows]
+
     def stock_exists(self, ticker: str) -> bool:
         row = self.conn.execute(
             "SELECT 1 FROM stocks WHERE ticker = ?", (ticker.upper(),)
@@ -100,24 +115,57 @@ class ThemeStore:
         self.conn.commit()
 
     def save_theme_result(self, result: ThemeResult) -> None:
-        """Save a full ThemeResult to the database."""
-        self.upsert_stock(result.profile)
-        # Clear old themes for this ticker before inserting new ones
-        self.conn.execute(
-            "DELETE FROM stock_themes WHERE ticker = ?", (result.ticker,)
-        )
-        for theme in result.themes:
-            theme_id = self.ensure_theme(
-                theme.name, theme.canonical_category
-            )
+        """Save a full ThemeResult atomically — all-or-nothing.
+
+        Uses a single SQLite transaction so a crash mid-save leaves no partial
+        data: the ticker will not appear in `stocks` and will be retried on the
+        next build_database() run.
+        """
+        with self.conn:
+            # Upsert stock row
             self.conn.execute(
-                """INSERT INTO stock_themes
-                   (ticker, theme_id, confidence, source, evidence, updated_at)
-                   VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-                (result.ticker, theme_id, theme.confidence,
-                 theme.source.value, theme.evidence),
+                """INSERT INTO stocks
+                       (ticker, name, sector, industry, sic_code,
+                        market_cap, exchange, patent_count, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(ticker) DO UPDATE SET
+                       name=excluded.name, sector=excluded.sector,
+                       industry=excluded.industry, sic_code=excluded.sic_code,
+                       market_cap=excluded.market_cap, exchange=excluded.exchange,
+                       patent_count=excluded.patent_count,
+                       updated_at=CURRENT_TIMESTAMP""",
+                (
+                    result.ticker, result.profile.name, result.profile.sector,
+                    result.profile.industry, result.profile.sic_code,
+                    result.profile.market_cap, result.profile.exchange,
+                    result.profile.patent_count or 0,
+                ),
             )
-        self.conn.commit()
+            # Replace themes atomically
+            self.conn.execute(
+                "DELETE FROM stock_themes WHERE ticker = ?", (result.ticker,)
+            )
+            for theme in result.themes:
+                # Upsert theme row (inline to stay inside the transaction)
+                self.conn.execute(
+                    """INSERT INTO themes (name, category, description)
+                       VALUES (?, ?, ?)
+                       ON CONFLICT(name) DO UPDATE SET
+                           category=excluded.category,
+                           description=excluded.description""",
+                    (theme.name, theme.canonical_category, None),
+                )
+                row = self.conn.execute(
+                    "SELECT id FROM themes WHERE name = ?", (theme.name,)
+                ).fetchone()
+                self.conn.execute(
+                    """INSERT INTO stock_themes
+                           (ticker, theme_id, confidence, source, evidence, updated_at)
+                       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                    (result.ticker, row["id"], theme.confidence,
+                     theme.source.value, theme.evidence),
+                )
+        # with-block commits on clean exit, rolls back on any exception
 
     def get_themes_for_stock(self, ticker: str,
                              min_confidence: float = 0.0) -> list[dict]:

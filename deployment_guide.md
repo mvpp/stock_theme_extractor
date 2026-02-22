@@ -245,6 +245,55 @@ stats = run_batch(
 print(stats)  # {"processed": 6, "skipped": 0, "failed": 0, "total": 6}
 ```
 
+### Chunked build via cron (recommended for SSH / long-running)
+
+Running the full build in one session risks SSH drops and ties up a terminal for days.
+Instead, use `max_tickers` to process a fixed number of stocks per cron invocation.
+Each run automatically picks up where the last left off — `skip_existing=True` (the
+default) ensures already-processed tickers are never repeated.
+
+Logs are always written to `stock_themes.log` (next to the database) across all runs,
+so you can review the full history even after an SSH drop:
+
+```bash
+tail -f stock_themes.log    # live progress from a second terminal
+grep WARNING stock_themes.log  # review all per-ticker failures
+```
+
+**Cron — process 250 tickers every 40 minutes:**
+
+```cron
+*/40 * * * * cd /Users/xihanliu/Programs/stock_themes && \
+  .venv/bin/python -c \
+  "from stock_themes import build_database; build_database(max_tickers=250)" \
+  >> stock_themes.log 2>&1
+```
+
+Tune `max_tickers` to fit your schedule:
+
+| `max_tickers` | Est. time per run | Runs to finish ~8,300 stocks |
+|---------------|-------------------|------------------------------|
+| 100           | 15–30 min         | ~83 runs (~2 days at */40)   |
+| 250           | 30–60 min         | ~34 runs (~1 day at */40)    |
+| 500           | 60–120 min        | ~17 runs (~12 h at */40)     |
+
+### Seasonal / quarterly refresh
+
+To re-process all tickers that haven't been updated since a given date, use
+`refresh_after`. Tickers updated on or after that date are skipped; stale ones
+are re-queued. Combine with `max_tickers` to spread the refresh over days:
+
+```cron
+# Seasonal refresh — re-process stale tickers in 250-ticker chunks
+*/40 * * * * cd /Users/xihanliu/Programs/stock_themes && \
+  .venv/bin/python -c \
+  "from stock_themes import build_database; \
+   build_database(max_tickers=250, refresh_after='2025-01-01')" \
+  >> stock_themes.log 2>&1
+```
+
+Replace `'2025-01-01'` with the start date of the current quarter or season.
+
 ---
 
 ## 6. Querying the Database
@@ -365,23 +414,35 @@ After 30 days of daily collection, each ticker will have ~900 messages (30 per d
 
 ---
 
-## 8. Monthly Theme Refresh
+## 8. Seasonal / Monthly Theme Refresh
 
-Run `build_database()` again with `skip_existing=False` to reprocess all tickers with fresh data:
+Use `refresh_after` to re-process all tickers that haven't been updated since a given
+date. Unlike `skip_existing=False` (which re-queues everything at once), combining
+`refresh_after` with `max_tickers` lets you spread the refresh over days via cron:
 
 ```python
 from stock_themes import build_database
 
+# Re-process all tickers last updated before 2025-01-01, 250 at a time
 build_database(
     db_path="stock_themes.db",
-    skip_existing=False,  # reprocess all tickers
+    refresh_after="2025-01-01",
+    max_tickers=250,
 )
 ```
 
-Or create a monthly cron:
+**Chunked monthly refresh cron** (runs every 40 min on the first Saturday of each month
+until all stale tickers are refreshed, then becomes a no-op):
+
 ```cron
-# First Saturday of each month at 2 AM
-0 2 1-7 * 6 cd /Users/xihanliu/Programs/stock_themes && /Users/xihanliu/Programs/stock_themes/.venv/bin/python -c "from stock_themes import build_database; build_database(skip_existing=False)" >> /tmp/stock_themes_monthly.log 2>&1
+# First Saturday of each month — refresh tickers older than 90 days, 250 at a time
+*/40 * 1-7 * 6 cd /Users/xihanliu/Programs/stock_themes && \
+  .venv/bin/python -c \
+  "from stock_themes import build_database; \
+   from datetime import date, timedelta; \
+   cutoff = str(date.today() - timedelta(days=90)); \
+   build_database(max_tickers=250, refresh_after=cutoff)" \
+  >> stock_themes.log 2>&1
 ```
 
 This will:

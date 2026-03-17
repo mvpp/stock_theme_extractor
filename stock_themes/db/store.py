@@ -232,6 +232,28 @@ class ThemeStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_stocks_for_themes(self, theme_names: list[str],
+                              min_confidence: float = 0.0) -> list[dict]:
+        """Find stocks matching ANY of the given theme names.
+
+        Used by tree-aware queries: find_stocks("AI") expands to all
+        descendants and passes them here.
+        """
+        if not theme_names:
+            return []
+        placeholders = ",".join("?" for _ in theme_names)
+        rows = self.conn.execute(
+            f"""SELECT s.ticker, s.name, s.market_cap,
+                       st.confidence, st.source, t.name as theme_name
+                FROM stock_themes st
+                JOIN stocks s ON s.ticker = st.ticker
+                JOIN themes t ON t.id = st.theme_id
+                WHERE t.name IN ({placeholders}) AND st.confidence >= ?
+                ORDER BY st.confidence DESC""",
+            (*theme_names, min_confidence),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def get_theme_distribution(self) -> list[dict]:
         rows = self.conn.execute(
             """SELECT t.name, t.category, COUNT(*) as stock_count,

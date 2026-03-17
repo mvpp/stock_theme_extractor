@@ -10,7 +10,12 @@
       "Bash(grep -v \"^Loading weights\\\\|^BertModel\\\\|^Key\\\\|^---\\\\|^Notes:\\\\|^$\\\\|httpx\\\\|Warning.*HF\\\\|tqdm\\\\|Screener page\\\\|Use pytorch\")",
       "Bash(pip install:*)",
       "Bash(pip3 install:*)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(.venv/bin/python -m py_compile stock_themes/taxonomy/tree.py)",
+      "Bash(.venv/bin/python -m py_compile stock_themes/extraction/ensemble.py)",
+      "Bash(.venv/bin/python -m py_compile stock_themes/db/store.py)",
+      "Bash(.venv/bin/python -m py_compile stock_themes/db/queries.py)",
+      "Bash(.venv/bin/python -m py_compile scripts/suggest_taxonomy.py)"
     ]
   }
 }

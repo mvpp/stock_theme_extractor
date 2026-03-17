@@ -15,10 +15,22 @@ def lookup(ticker: str, db_path: str = "stock_themes.db") -> list[dict]:
 
 
 def find_stocks(theme_name: str, db_path: str = "stock_themes.db",
-                min_confidence: float = 0.3) -> list[dict]:
-    """Find all stocks matching a theme."""
+                min_confidence: float = 0.3,
+                include_descendants: bool = True) -> list[dict]:
+    """Find all stocks matching a theme, optionally including descendants.
+
+    When include_descendants=True (default), searching for "artificial intelligence"
+    also returns stocks tagged with "generative ai", "machine learning", etc.
+    """
     store = ThemeStore(db_path)
     try:
+        if include_descendants:
+            from stock_themes.taxonomy.tree import get_theme_tree
+            tree = get_theme_tree()
+            descendants = tree.get_descendants(theme_name)
+            if descendants:
+                all_names = [theme_name] + descendants
+                return store.get_stocks_for_themes(all_names, min_confidence)
         return store.get_stocks_for_theme(theme_name, min_confidence)
     finally:
         store.close()

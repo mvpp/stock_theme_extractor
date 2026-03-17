@@ -8,6 +8,7 @@ from collections import defaultdict
 from stock_themes.config import LLM_MARKET_CAP_THRESHOLD
 from stock_themes.models import CompanyProfile, Theme, OpenTheme, ThemeResult, ExtractionMethod
 from stock_themes.taxonomy.normalizer import ThemeNormalizer
+from stock_themes.taxonomy.tree import get_theme_tree
 from stock_themes.semantic.filter import semantic_filter, FilterResult
 
 logger = logging.getLogger(__name__)
@@ -241,6 +242,9 @@ class EnsembleExtractor:
                 canonical_category=category,
             ))
 
+        # Hierarchical family pooling: keep deepest 3 per family, boost confidence
+        merged = self._pool_family_confidence(merged)
+
         # Clinical stage dedup: keep only the most advanced stage
         CLINICAL_STAGES = [
             "preclinical", "phase 1", "phase 2", "phase 3",
@@ -260,3 +264,80 @@ class EnsembleExtractor:
 
         merged.sort(key=lambda t: t.confidence, reverse=True)
         return merged
+
+    def _pool_family_confidence(self, merged: list[Theme]) -> list[Theme]:
+        """Pool confidence across themes in the same family.
+
+        For each family (shared root ancestor in the theme tree):
+        - Sort themes by depth (most specific first), then confidence
+        - Keep the deepest 3 themes per family
+        - Boost their confidence using sibling evidence + breadth bonus
+        - Drop parent/shallower themes (their evidence is absorbed)
+
+        Themes not in the tree (orphans) pass through unchanged.
+        """
+        tree = get_theme_tree()
+        if not tree.has_themes():
+            return merged
+
+        # Group by family (root ancestor)
+        families: dict[str, list[Theme]] = defaultdict(list)
+        orphans: list[Theme] = []
+
+        for theme in merged:
+            family = tree.get_family(theme.name)
+            if family is not None:
+                families[family].append(theme)
+            else:
+                orphans.append(theme)
+
+        result: list[Theme] = list(orphans)
+
+        for family_name, family_themes in families.items():
+            if len(family_themes) == 1:
+                result.append(family_themes[0])
+                continue
+
+            # Breadth bonus: more family members found = stronger signal
+            # 0.03 per additional member, capped at 0.10
+            breadth_bonus = min(0.10, 0.03 * (len(family_themes) - 1))
+
+            # Sort by depth desc (most specific first), then confidence desc
+            family_themes.sort(
+                key=lambda t: (tree.get_depth(t.name), t.confidence),
+                reverse=True,
+            )
+
+            # Keep deepest 3 leaves per root
+            kept = family_themes[:3]
+            dropped = family_themes[3:]
+
+            for theme in kept:
+                # Sibling/parent corroboration: 30% weight from avg sibling conf
+                siblings = [t.confidence for t in family_themes if t.name != theme.name]
+                if siblings:
+                    avg_sibling = sum(siblings) / len(siblings)
+                    # Scale boost by how many siblings exist (breadth_bonus / max)
+                    sibling_boost = 0.3 * avg_sibling * (breadth_bonus / 0.10)
+                else:
+                    sibling_boost = 0.0
+
+                boosted = min(1.0, theme.confidence + sibling_boost + breadth_bonus)
+
+                result.append(Theme(
+                    name=theme.name,
+                    confidence=round(boosted, 3),
+                    source=theme.source,
+                    evidence=theme.evidence,
+                    canonical_category=theme.canonical_category,
+                ))
+
+            if dropped:
+                dropped_names = [t.name for t in dropped]
+                kept_names = [t.name for t in kept]
+                logger.debug(
+                    f"Family '{family_name}': kept {kept_names}, "
+                    f"dropped {dropped_names} (evidence absorbed)"
+                )
+
+        return result

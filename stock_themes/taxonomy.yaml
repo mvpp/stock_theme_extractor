@@ -1,0 +1,189 @@
+# Hierarchical theme taxonomy for confidence pooling.
+# Each root key is a top-level family. Nested keys are children.
+# Leaf nodes have empty dict {}.
+# Only canonical themes (from themes.py) should appear here.
+
+# --- Technology families ---
+artificial intelligence:
+  generative ai:
+    large language models: {}   # not in taxonomy yet, but valid open theme
+  machine learning:
+    deep learning: {}           # alias maps to AI, but separate canonical when in tree
+  computer vision: {}
+  natural language processing: {}
+  responsible ai: {}
+  healthcare ai: {}
+
+cloud computing:
+  cloud infrastructure: {}
+  data center: {}
+  edge computing: {}
+
+semiconductors:
+  ai chips: {}
+
+cybersecurity:
+  privacy: {}
+  digital identity: {}
+
+robotics:
+  robotic process automation: {}
+  medical robotics: {}
+  automation: {}
+
+blockchain:
+  cryptocurrency: {}
+  defi: {}
+  digital assets: {}
+  nft: {}
+
+# --- Digital Economy families ---
+e-commerce:
+  direct-to-consumer: {}
+  marketplace platform: {}
+  subscription economy: {}
+
+fintech:
+  digital payments: {}
+  buy now pay later: {}
+  embedded finance: {}
+  open banking: {}
+  credit scoring: {}
+  insurtech: {}
+  regtech: {}
+
+streaming:
+  music streaming: {}
+  podcasting: {}
+
+gaming:
+  esports: {}
+
+social media:
+  creator economy: {}
+
+# --- Healthcare & Life Sciences families ---
+oncology:
+  immuno-oncology: {}   # alias exists but useful as tree child
+
+drug discovery:
+  precision medicine: {}
+  small molecule: {}
+
+biotechnology:
+  genomics: {}
+  synthetic biology: {}
+  bioprinting: {}
+
+gene therapy: {}
+
+rna therapeutics: {}
+
+monoclonal antibodies:
+  antibody-drug conjugate: {}
+  bispecific antibody: {}
+
+car-t: {}
+
+vaccine: {}
+
+diagnostics: {}
+
+medical devices:
+  wearable technology: {}
+  connected fitness: {}
+
+telehealth:
+  digital health: {}
+
+# --- Energy & Environment families ---
+renewable energy:
+  solar: {}
+  wind energy: {}
+  geothermal: {}
+  biofuels: {}
+
+clean energy:
+  carbon capture: {}
+  carbon credits: {}
+  hydrogen: {}
+
+electric vehicles:
+  battery technology: {}
+  autonomous driving: {}
+  autonomous vehicles: {}
+
+nuclear energy: {}
+
+energy storage: {}
+
+sustainability:
+  circular economy: {}
+  climate tech: {}
+
+# --- Industrials families ---
+space:
+  satellite: {}
+
+aerospace:
+  defense: {}
+  defense tech: {}
+  national security: {}
+
+supply chain:
+  last mile delivery: {}
+  food delivery: {}
+
+advanced manufacturing:
+  3d printing: {}
+
+drones: {}
+
+infrastructure:
+  smart cities: {}
+  smart grid: {}
+  construction tech: {}
+
+# --- Financial Services families ---
+banking:
+  wealth management: {}
+  asset management: {}
+
+insurance: {}
+
+real estate:
+  proptech: {}
+
+payments infrastructure: {}
+
+# --- Materials families ---
+lithium:
+  cobalt: {}
+  nickel: {}
+
+# --- Agriculture families ---
+agriculture:
+  agtech: {}
+  precision agriculture: {}
+  vertical farming: {}
+
+# --- Consumer families ---
+luxury:
+  athleisure: {}
+  beauty tech: {}
+
+smart home:
+  internet of things: {}
+
+# --- Demographics families ---
+aging population:
+  eldertech: {}
+  longevity: {}
+
+remote work:
+  gig economy: {}
+
+# --- Telecom families ---
+telecommunications:
+  5g: {}
+  fiber optics: {}

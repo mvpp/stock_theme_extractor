@@ -45,6 +45,7 @@ def build_database(
     llm_market_cap_threshold: float = 1e9,
     max_themes_per_stock: int = 10,
     skip_existing: bool = True,
+    tickers: list[str] | None = None,
     max_tickers: int | None = None,
     refresh_after: str | None = None,
     log_file: str | None = None,
@@ -103,6 +104,7 @@ def build_database(
         llm_market_cap_threshold=llm_market_cap_threshold,
         max_themes_per_stock=max_themes_per_stock,
         skip_existing=skip_existing,
+        tickers=tickers,
         max_tickers=max_tickers,
         refresh_after=refresh_after,
     )

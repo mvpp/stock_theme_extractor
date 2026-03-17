@@ -34,6 +34,18 @@ class YahooFinanceProvider:
         if not info or not info.get("shortName"):
             raise TickerNotFoundError(f"Ticker '{ticker}' not found on Yahoo Finance")
 
+        # Best-effort news fetching
+        news_titles = []
+        try:
+            news = stock.news
+            if news:
+                for article in news:
+                    title = article.get("title", "")
+                    if title:
+                        news_titles.append(title)
+        except Exception:
+            pass
+
         return CompanyProfile(
             ticker=ticker.upper(),
             name=info.get("shortName", ""),
@@ -44,6 +56,7 @@ class YahooFinanceProvider:
             employees=info.get("fullTimeEmployees"),
             website=info.get("website"),
             business_summary=info.get("longBusinessSummary"),
+            news_titles=news_titles,
             data_sources=["yahoo_finance"],
         )
 

@@ -6,13 +6,14 @@ import logging
 
 import requests
 
-from stock_themes.config import FAKE_USER_AGENT
+from stock_themes.config import (
+    FAKE_USER_AGENT, PROXY_URL,
+    GDELT_API_URL, GDELT_MAX_RECORDS, GDELT_TIMESPAN,
+)
 from stock_themes.exceptions import ProviderError
 from stock_themes.models import CompanyProfile
 
 logger = logging.getLogger(__name__)
-
-GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 
 class GDELTProvider:
@@ -37,13 +38,17 @@ class GDELTProvider:
             params = {
                 "query": f'"{clean_name}" sourcelang:eng',
                 "mode": "artlist",
-                "maxrecords": "75",
-                "timespan": "3months",
+                "maxrecords": GDELT_MAX_RECORDS,
+                "timespan": GDELT_TIMESPAN,
                 "format": "json",
                 "sort": "datedesc",
             }
             headers = {"User-Agent": FAKE_USER_AGENT}
-            resp = requests.get(GDELT_DOC_API, params=params, headers=headers, timeout=30)
+            proxies = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
+            resp = requests.get(
+                GDELT_API_URL, params=params, headers=headers, timeout=30,
+                proxies=proxies,
+            )
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:

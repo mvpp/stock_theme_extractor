@@ -59,6 +59,19 @@ class Theme:
 
 
 @dataclass
+class OpenTheme:
+    """A free-form theme not constrained to canonical taxonomy."""
+
+    text: str                    # raw theme text (e.g., "breast cancer immunotherapy")
+    confidence: float            # LLM confidence (0.0-1.0)
+    distinctiveness: float = 0.0 # BM25 corpus distinctiveness (0-1)
+    source: str = "llm"         # "llm", "narrative"
+    evidence: str | None = None
+    mapped_canonical: str | None = None  # nearest canonical theme, if any
+    mapped_similarity: float = 0.0       # cosine sim to that canonical
+
+
+@dataclass
 class ThemeResult:
     """Final output for a ticker."""
 
@@ -67,6 +80,7 @@ class ThemeResult:
     themes: list[Theme]
     profile: CompanyProfile
     metadata: dict = field(default_factory=dict)
+    open_themes: list[OpenTheme] = field(default_factory=list)
 
     def theme_names(self, min_confidence: float = 0.0) -> list[str]:
         return [t.name for t in self.themes if t.confidence >= min_confidence]

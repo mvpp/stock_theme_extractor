@@ -4,7 +4,13 @@
       "WebFetch(domain:www.sec.gov)",
       "Bash(python3 -m py_compile:*)",
       "Bash(source .venv/bin/activate)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "WebSearch",
+      "Bash(grep -v \"^Loading weights\\\\|^BertModel\\\\|^Key\\\\|^---\\\\|^Notes:\\\\|^$\\\\|httpx\\\\|Warning.*HF\")",
+      "Bash(grep -v \"^Loading weights\\\\|^BertModel\\\\|^Key\\\\|^---\\\\|^Notes:\\\\|^$\\\\|httpx\\\\|Warning.*HF\\\\|tqdm\\\\|Screener page\\\\|Use pytorch\")",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python -c \":*)"
     ]
   }
 }

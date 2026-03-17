@@ -56,6 +56,22 @@ class DataPipeline:
             pass
 
         try:
+            from stock_themes.data.finnhub import FinnhubProvider
+            fh = FinnhubProvider()
+            if fh.is_available():
+                enrichment.append(fh)
+        except ImportError:
+            pass
+
+        try:
+            from stock_themes.data.marketaux import MarketAuxProvider
+            maux = MarketAuxProvider()
+            if maux.is_available():
+                enrichment.append(maux)
+        except ImportError:
+            pass
+
+        try:
             from stock_themes.data.social import StockTwitsProvider
             enrichment.append(StockTwitsProvider())
         except ImportError:
@@ -150,6 +166,16 @@ class DataPipeline:
             merged.patent_cpc_codes.extend(profile.patent_cpc_codes)
             merged.news_themes.extend(profile.news_themes)
             merged.news_titles.extend(profile.news_titles)
+
+        # Deduplicate news titles (normalize: lowercase + strip)
+        seen_titles: set[str] = set()
+        unique_titles: list[str] = []
+        for title in merged.news_titles:
+            key = title.strip().lower()
+            if key not in seen_titles:
+                seen_titles.add(key)
+                unique_titles.append(title)
+        merged.news_titles = unique_titles
 
         # Sum patent count
         merged.patent_count = sum(p.patent_count for p in profiles)

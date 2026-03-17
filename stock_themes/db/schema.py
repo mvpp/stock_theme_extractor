@@ -43,10 +43,25 @@ CREATE TABLE IF NOT EXISTS social_messages (
     UNIQUE(source, message_id)
 );
 
+CREATE TABLE IF NOT EXISTS open_themes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL REFERENCES stocks(ticker),
+    theme_text TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    distinctiveness REAL DEFAULT 0.0,
+    source TEXT NOT NULL,
+    evidence TEXT,
+    mapped_canonical TEXT,
+    mapped_similarity REAL DEFAULT 0.0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_stock_themes_theme ON stock_themes(theme_id);
 CREATE INDEX IF NOT EXISTS idx_stock_themes_confidence ON stock_themes(confidence DESC);
 CREATE INDEX IF NOT EXISTS idx_stocks_market_cap ON stocks(market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_social_ticker_date ON social_messages(ticker, collected_at);
+CREATE INDEX IF NOT EXISTS idx_open_themes_ticker ON open_themes(ticker);
+CREATE INDEX IF NOT EXISTS idx_open_themes_text ON open_themes(theme_text);
 """
 
 

@@ -11,6 +11,7 @@ from stock_themes.config import (
     LLM_MARKET_CAP_THRESHOLD,
     LLM_DELAY_SECONDS,
     BATCH_SIZE,
+    CORPUS_REBUILD_EVERY_N,
 )
 from stock_themes.data.pipeline import DataPipeline
 from stock_themes.extraction.ensemble import EnsembleExtractor
@@ -80,6 +81,16 @@ def run_batch(
     pipeline = DataPipeline()
     extractor = EnsembleExtractor(use_llm=True, max_themes=max_themes_per_stock)
 
+    # Load or build corpus scorer for distinctiveness scoring
+    corpus_scorer = None
+    try:
+        from stock_themes.corpus.tfidf import CorpusScorer
+        corpus_scorer = CorpusScorer(db_path)
+        if not corpus_scorer.load():
+            logger.info("No TF-IDF corpus cache found — will build after processing")
+    except ImportError:
+        logger.debug("scikit-learn not installed — skipping corpus scoring")
+
     # Process tickers
     run_start = time.monotonic()
     for ticker in tqdm(tickers_to_process, desc="Processing stocks"):
@@ -91,11 +102,26 @@ def run_batch(
                 store=store,
                 db_path=db_path,
                 llm_market_cap_threshold=llm_market_cap_threshold,
+                corpus_scorer=corpus_scorer,
             )
             stats["processed"] += 1
+
+            # Rebuild corpus periodically
+            if (corpus_scorer is not None
+                    and stats["processed"] % CORPUS_REBUILD_EVERY_N == 0):
+                logger.info(f"Rebuilding TF-IDF corpus after {stats['processed']} tickers")
+                corpus_scorer.build()
         except Exception as e:
             logger.warning(f"Failed to process {ticker}: {e}")
             stats["failed"] += 1
+
+    # Final corpus rebuild at end of run
+    if corpus_scorer is not None and stats["processed"] > 0:
+        logger.info("Final TF-IDF corpus rebuild")
+        try:
+            corpus_scorer.build()
+        except Exception as e:
+            logger.warning(f"Final corpus rebuild failed: {e}")
 
     store.close()
     elapsed = time.monotonic() - run_start
@@ -117,6 +143,7 @@ def _process_single(
     store: ThemeStore,
     db_path: str,
     llm_market_cap_threshold: float = LLM_MARKET_CAP_THRESHOLD,
+    corpus_scorer=None,
 ) -> None:
     """Process a single ticker: fetch data, extract themes, save to DB."""
 
@@ -126,6 +153,13 @@ def _process_single(
 
     # Extract themes
     result = extractor.extract(profile)
+
+    # Score open themes by corpus distinctiveness
+    if corpus_scorer is not None and corpus_scorer.is_ready() and result.open_themes:
+        theme_texts = [ot.text for ot in result.open_themes]
+        scores = corpus_scorer.score_themes(ticker, theme_texts)
+        for ot, score in zip(result.open_themes, scores):
+            ot.distinctiveness = round(score, 3)
 
     # Save to database
     store.save_theme_result(result)

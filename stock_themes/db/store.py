@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from stock_themes.db.schema import init_db
-from stock_themes.models import CompanyProfile, Theme, ThemeResult, SocialMessage, ExtractionMethod
+from stock_themes.models import CompanyProfile, Theme, ThemeResult, SocialMessage, OpenTheme, ExtractionMethod
 
 
 class ThemeStore:
@@ -165,7 +165,47 @@ class ThemeStore:
                     (result.ticker, row["id"], theme.confidence,
                      theme.source.value, theme.evidence),
                 )
+            # Save open themes
+            self.conn.execute(
+                "DELETE FROM open_themes WHERE ticker = ?", (result.ticker,)
+            )
+            for ot in result.open_themes:
+                self.conn.execute(
+                    """INSERT INTO open_themes
+                           (ticker, theme_text, confidence, distinctiveness,
+                            source, evidence, mapped_canonical, mapped_similarity,
+                            updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                    (result.ticker, ot.text, ot.confidence, ot.distinctiveness,
+                     ot.source, ot.evidence, ot.mapped_canonical, ot.mapped_similarity),
+                )
         # with-block commits on clean exit, rolls back on any exception
+
+    def get_open_themes(self, ticker: str) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT theme_text, confidence, distinctiveness, source,
+                      evidence, mapped_canonical, mapped_similarity
+               FROM open_themes WHERE ticker = ?
+               ORDER BY confidence DESC""",
+            (ticker.upper(),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_emerging_themes(self, min_count: int = 3,
+                            min_avg_distinctiveness: float = 0.0) -> list[dict]:
+        """Find open themes that appear across multiple stocks."""
+        rows = self.conn.execute(
+            """SELECT theme_text, COUNT(*) as stock_count,
+                      AVG(confidence) as avg_confidence,
+                      AVG(distinctiveness) as avg_distinctiveness,
+                      GROUP_CONCAT(ticker, ', ') as tickers
+               FROM open_themes
+               GROUP BY theme_text
+               HAVING stock_count >= ? AND avg_distinctiveness >= ?
+               ORDER BY stock_count DESC, avg_confidence DESC""",
+            (min_count, min_avg_distinctiveness),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_themes_for_stock(self, ticker: str,
                              min_confidence: float = 0.0) -> list[dict]:

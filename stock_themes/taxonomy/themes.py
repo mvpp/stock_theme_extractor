@@ -64,6 +64,35 @@ THEME_DESCRIPTIONS: dict[str, str] = {
     "vaccines": "vaccine immunization mRNA viral vector pandemic prevention",
     "rare diseases": "rare disease orphan drug genetic disorder unmet medical need",
     "cannabis": "cannabis marijuana CBD THC legalization dispensary",
+    # Disease areas
+    "oncology": "oncology cancer tumor carcinoma lymphoma leukemia melanoma immuno-oncology",
+    "neurology": "neurology neuroscience neurodegeneration Alzheimer Parkinson multiple sclerosis CNS",
+    "autoimmune": "autoimmune rheumatoid arthritis lupus psoriasis Crohn ulcerative colitis inflammatory",
+    "rare disease": "rare disease orphan drug genetic disorder ultra-rare unmet medical need",
+    "infectious disease": "infectious disease antiviral antibiotic vaccine HIV hepatitis RSV pathogen",
+    "cardiovascular": "cardiovascular heart disease heart failure atrial fibrillation hypertension thrombosis",
+    "metabolic": "metabolic disease diabetes obesity NASH NAFLD GLP-1 metabolic syndrome",
+    "ophthalmology": "ophthalmology macular degeneration glaucoma retinal ocular eye disease",
+    "dermatology": "dermatology atopic dermatitis eczema psoriasis skin disease acne",
+    "respiratory": "respiratory disease asthma COPD pulmonary cystic fibrosis lung",
+    "hematology": "hematology sickle cell hemophilia thalassemia myeloma myelofibrosis blood disorder",
+    # Drug modalities
+    "monoclonal antibodies": "monoclonal antibody mAb immunoglobulin biologic targeted therapy",
+    "antibody-drug conjugate": "antibody-drug conjugate ADC payload linker cytotoxic targeted delivery",
+    "bispecific antibody": "bispecific antibody bi-specific dual-targeting T-cell engager",
+    "car-t": "CAR-T chimeric antigen receptor cell therapy adoptive immunotherapy",
+    "gene therapy": "gene therapy gene editing CRISPR AAV vector gene delivery",
+    "rna therapeutics": "RNA therapeutics mRNA siRNA antisense oligonucleotide RNAi",
+    "small molecule": "small molecule kinase inhibitor oral drug targeted therapy compound",
+    "peptide therapeutics": "peptide therapeutics cyclic peptide peptide drug stapled peptide",
+    "vaccine": "vaccine vaccination immunization adjuvant antigen prophylactic",
+    # Clinical stages
+    "preclinical": "preclinical pre-clinical IND filing investigational new drug discovery",
+    "phase 1": "Phase 1 clinical trial first-in-human dose escalation safety study",
+    "phase 2": "Phase 2 clinical trial proof-of-concept pivotal efficacy study",
+    "phase 3": "Phase 3 clinical trial registrational confirmatory large-scale study",
+    "fda approved": "FDA approved marketed drug commercial stage regulatory approval",
+    "nda/bla filed": "NDA BLA new drug application biologics license application regulatory filing",
     # --- Energy & Environment ---
     "renewable energy": "renewable energy clean energy green energy transition",
     "solar": "solar energy photovoltaic panel solar farm distributed generation",
@@ -214,6 +243,17 @@ THEME_CATEGORIES: dict[str, str] = {
         "telehealth", "drug discovery", "precision medicine", "digital health",
         "mental health", "healthcare ai", "longevity", "synthetic biology",
         "medical robotics", "diagnostics", "vaccines", "rare diseases", "cannabis",
+        # Disease areas
+        "oncology", "neurology", "autoimmune", "rare disease",
+        "infectious disease", "cardiovascular", "metabolic",
+        "ophthalmology", "dermatology", "respiratory", "hematology",
+        # Drug modalities
+        "monoclonal antibodies", "antibody-drug conjugate", "bispecific antibody",
+        "car-t", "gene therapy", "rna therapeutics", "small molecule",
+        "peptide therapeutics", "vaccine",
+        # Clinical stages
+        "preclinical", "phase 1", "phase 2", "phase 3",
+        "fda approved", "nda/bla filed",
     ]},
     # Energy
     **{t: "energy & environment" for t in [

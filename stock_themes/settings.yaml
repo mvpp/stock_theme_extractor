@@ -1,0 +1,80 @@
+# stock_themes configuration
+# Secrets (API keys, passwords) go in .env — everything else goes here.
+
+# Paths
+cache_dir: ~/.cache/stock_themes
+
+# LLM
+llm:
+  providers:
+    kimi:
+      base_url: https://api.moonshot.ai/v1
+      model: kimi-k2.5
+      env_key: KIMI_API_KEY
+    minimax:
+      base_url: https://api.minimaxi.chat/v1
+      model: MiniMax-Text-01
+      env_key: MINIMAX_API_KEY
+    glm:
+      base_url: https://open.bigmodel.cn/api/paas/v4
+      model: glm-4-flash-250414
+      env_key: GLM_API_KEY
+  default_provider: kimi
+  market_cap_threshold: 100000000  # $100M — includes small-cap biotech
+  delay_seconds: 0.5
+  max_input_chars: 6000  # truncate SEC text to this many chars for LLM input
+  similarity_threshold: 0.60  # min cosine sim to map LLM theme -> canonical (fallback after normalizer)
+
+# Semantic filter
+semantic:
+  embedding_model: all-MiniLM-L6-v2
+  similarity_threshold: 0.6
+  chunk_size_words: 200
+
+# News providers
+news:
+  gdelt:
+    api_url: https://api.gdeltproject.org/api/v2/doc/doc
+    max_records: 75
+    timespan: 3months
+  marketaux:
+    api_url: https://api.marketaux.com/v1/news/all
+    limit: 50
+    language: en
+
+# Proxy (Webshare rotating proxy — credentials in .env)
+proxy:
+  host: p.webshare.io
+  port: 80
+
+# Rate limits (seconds between requests)
+rate_limits:
+  sec_edgar: 0.15
+  yahoo_finance: 0.5
+
+# Cache TTLs (hours)
+cache_ttl:
+  yahoo: 24
+  sec_10k: 168
+  sec_10q: 24
+  patent: 168
+  news: 12
+
+# Corpus TF-IDF (distinctiveness scoring)
+corpus:
+  rebuild_every_n_tickers: 500  # rebuild TF-IDF matrix after this many tickers
+  ngram_range: [1, 3]
+  max_features: 50000
+  min_df: 2    # ignore terms in fewer than 2 docs
+  max_df: 0.8  # ignore terms in >80% of docs (boilerplate)
+
+# Narrative extraction (market perception from news)
+narrative:
+  max_titles: 20   # max news titles to send to LLM
+  max_themes: 5    # max narrative themes per stock
+
+# Batch processing
+batch_size: 50
+
+# User-Agent for non-yfinance HTTP requests
+user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"

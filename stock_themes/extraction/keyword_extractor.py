@@ -147,6 +147,107 @@ THEME_KEYWORDS: dict[str, list[str]] = {
         r"\bsustainab\w+\b", r"\bESG\b", r"\bcarbon\b.*\b(?:neutral|footprint|offset)\b",
         r"\bnet zero\b",
     ],
+    # --- Disease areas ---
+    "oncology": [
+        r"\boncolog\w+\b", r"\bcancer\b", r"\btumou?r\b",
+        r"\bcarcinoma\b", r"\blymphoma\b", r"\bleuk[ae]mia\b", r"\bmelanoma\b",
+        r"\bsarcoma\b", r"\bimmuno.oncolog\w+\b",
+    ],
+    "neurology": [
+        r"\bneurolog\w+\b", r"\bneuroscien\w+\b", r"\bneurodegen\w+\b",
+        r"\bAlzheimer\b", r"\bParkinson\b", r"\bmultiple sclerosis\b",
+        r"\bepilepsy\b", r"\bCNS\b.*\b(?:disease|disorder|therap)\w*\b",
+    ],
+    "autoimmune": [
+        r"\bautoimmun\w+\b", r"\brheumatoid arthritis\b", r"\blupus\b",
+        r"\bpsoriasis\b", r"\bCrohn\b", r"\bulcerative colitis\b",
+        r"\binflammatory bowel\b",
+    ],
+    "rare disease": [
+        r"\brare disease\b", r"\borphan drug\b", r"\borphan\b.*\bdesignation\b",
+        r"\bultra.rare\b", r"\brare genetic\b",
+    ],
+    "infectious disease": [
+        r"\binfectious disease\b", r"\bantiviral\b", r"\bantibiotic\b",
+        r"\bantifungal\b", r"\bHIV\b", r"\bhepatitis\b", r"\bRSV\b",
+    ],
+    "cardiovascular": [
+        r"\bcardiovasc\w+\b", r"\bheart\b.*\b(?:disease|failure)\b",
+        r"\batrial fibrillation\b", r"\bhypertension\b", r"\bthrombosis\b",
+    ],
+    "metabolic": [
+        r"\bmetabolic\b.*\b(?:disease|disorder|syndrome)\b",
+        r"\bdiabetes\b", r"\bobesity\b", r"\bNASH\b", r"\bNAFLD\b", r"\bGLP.1\b",
+    ],
+    "ophthalmology": [
+        r"\bophthalmolog\w+\b", r"\bmacular degeneration\b", r"\bglaucoma\b",
+        r"\bretinal\b", r"\bocular\b",
+    ],
+    "dermatology": [
+        r"\bdermatolog\w+\b", r"\batopic dermatitis\b", r"\beczema\b",
+        r"\bskin\b.*\b(?:disease|disorder|condition)\b",
+    ],
+    "respiratory": [
+        r"\brespiratory\b.*\b(?:disease|disorder|therap)\w*\b",
+        r"\basthma\b", r"\bCOPD\b", r"\bpulmonary\b", r"\bcystic fibrosis\b",
+    ],
+    "hematology": [
+        r"\bhematolog\w+\b", r"\bsickle cell\b", r"\bhemophilia\b",
+        r"\bthalassemia\b", r"\bmyeloma\b", r"\bmyelofibrosis\b",
+    ],
+    # --- Drug modalities ---
+    "monoclonal antibodies": [
+        r"\bmonoclonal antibod\w+\b", r"\bmAb\b", r"\bimmunoglobulin\b",
+    ],
+    "antibody-drug conjugate": [
+        r"\bantibody.drug conjugat\w+\b", r"\bADC\b.*\b(?:therap|payload|linker)\w*\b",
+    ],
+    "bispecific antibody": [
+        r"\bbispecific\b", r"\bbi.specific\b", r"\bdual.targeting\b",
+    ],
+    "car-t": [
+        r"\bCAR.T\b", r"\bchimeric antigen receptor\b",
+    ],
+    "gene therapy": [
+        r"\bgene therap\w+\b", r"\bgene editing\b",
+        r"\bAAV\b.*\b(?:vector|therap|deliver)\w*\b",
+    ],
+    "rna therapeutics": [
+        r"\bRNA therap\w+\b", r"\bmRNA\b", r"\bsiRNA\b", r"\bantisense\b",
+        r"\boligonucleotide\b", r"\bRNAi\b",
+    ],
+    "small molecule": [
+        r"\bsmall molecule\b", r"\bkinase inhibitor\b",
+    ],
+    "peptide therapeutics": [
+        r"\bpeptide\b.*\b(?:therap|drug|candidate)\w*\b", r"\bcyclic peptide\b",
+    ],
+    "vaccine": [
+        r"\bvaccine\b.*\b(?:candidate|development|program|platform)\w*\b",
+        r"\bvaccinat\w+\b", r"\bimmuniz\w+\b",
+    ],
+    # --- Clinical stages ---
+    "preclinical": [
+        r"\bpreclinical\b", r"\bpre.clinical\b",
+        r"\bIND\b.*\b(?:filing|application|enabling)\w*\b",
+    ],
+    "phase 1": [
+        r"\b[Pp]hase\s*(?:1|I)\b(?![/\w]*(?:2|3|II|III))",
+        r"\bfirst.in.human\b",
+    ],
+    "phase 2": [
+        r"\b[Pp]hase\s*(?:2|II)\b(?![/\w]*(?:3|III))",
+    ],
+    "phase 3": [
+        r"\b[Pp]hase\s*(?:3|III)\b", r"\bregistrational\b.*\btrial\b",
+    ],
+    "fda approved": [
+        r"\bFDA approv\w+\b", r"\bcommercial.stage\b",
+    ],
+    "nda/bla filed": [
+        r"\bNDA\b.*\b(?:fil|submit)\w+\b", r"\bBLA\b.*\b(?:fil|submit)\w+\b",
+        r"\bnew drug application\b", r"\bbiologic.* license application\b",
+    ],
 }
 
 

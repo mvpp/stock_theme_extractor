@@ -9,8 +9,6 @@ from stock_themes.models import CompanyProfile
 
 logger = logging.getLogger(__name__)
 
-MAX_TEXT_LENGTH = 15_000  # Truncate very long filings
-
 
 class SECEdgarProvider:
     name = "sec_edgar"
@@ -51,16 +49,23 @@ class SECEdgarProvider:
         # Fallback chain: 10-Q → 10-K → S-1
         business_desc = None
         risk_factors = None
+        mda = None
         filing_type = None
 
         for form_type in ["10-Q", "10-K", "S-1"]:
             try:
-                desc, risks = self._extract_from_filing(company, form_type)
+                desc, risks, mda_text = self._extract_from_filing(company, form_type)
                 if desc:
                     business_desc = desc
                     risk_factors = risks
+                    mda = mda_text
                     filing_type = form_type
-                    logger.info(f"{ticker}: extracted text from {form_type}")
+                    logger.info(
+                        f"{ticker}: extracted from {form_type} — "
+                        f"business={len(desc)}ch, "
+                        f"risks={len(risks) if risks else 0}ch, "
+                        f"mda={len(mda_text) if mda_text else 0}ch"
+                    )
                     break
             except Exception as e:
                 logger.debug(f"{ticker}: {form_type} extraction failed: {e}")
@@ -75,54 +80,50 @@ class SECEdgarProvider:
             sic_code=sic_code,
             business_description=business_desc,
             risk_factors=risk_factors,
+            mda=mda,
             data_sources=["sec_edgar"],
         )
 
     def _extract_from_filing(
         self, company, form_type: str
-    ) -> tuple[str | None, str | None]:
-        """Extract business description and risk factors from a filing type."""
+    ) -> tuple[str | None, str | None, str | None]:
+        """Extract business description, risk factors, and MD&A from a filing.
+
+        Returns:
+            (business_desc, risk_factors, mda) — any may be None.
+        """
         filings = company.get_filings(form=form_type)
         if not filings or len(filings) == 0:
-            return None, None
+            return None, None, None
 
         latest = filings[0]
         filing_obj = latest.obj()
 
         business_desc = None
         risk_factors = None
+        mda = None
 
         if form_type == "10-K":
-            business_desc = self._get_section(filing_obj, [
-                "item_1", "item1", "business",
-            ])
-            risk_factors = self._get_section(filing_obj, [
-                "item_1a", "item1a", "risk_factors",
-            ])
+            # edgartools TenK has: .business, .risk_factors, .management_discussion
+            business_desc = self._get_section(filing_obj, ["business"])
+            risk_factors = self._get_section(filing_obj, ["risk_factors"])
+            mda = self._get_section(filing_obj, ["management_discussion"])
         elif form_type == "10-Q":
-            # 10-Q has MD&A in Item 2, which is the richest text
+            # 10-Q Item 2 IS the MD&A — use as business description
+            # (most content-rich section in quarterly filings)
             business_desc = self._get_section(filing_obj, [
-                "item_2", "item2", "management_discussion",
-                "mda", "item_1", "item1",
+                "management_discussion", "business",
             ])
-            risk_factors = self._get_section(filing_obj, [
-                "item_1a", "item1a", "risk_factors",
-            ])
+            risk_factors = self._get_section(filing_obj, ["risk_factors"])
+            # mda stays None — already captured in business_desc
         elif form_type == "S-1":
             business_desc = self._get_section(filing_obj, [
-                "business", "item_1", "summary", "prospectus_summary",
+                "business", "summary", "prospectus_summary",
             ])
-            risk_factors = self._get_section(filing_obj, [
-                "risk_factors", "item_1a",
-            ])
+            risk_factors = self._get_section(filing_obj, ["risk_factors"])
+            # mda stays None — S-1 doesn't have MD&A
 
-        # Truncate if too long
-        if business_desc and len(business_desc) > MAX_TEXT_LENGTH:
-            business_desc = business_desc[:MAX_TEXT_LENGTH]
-        if risk_factors and len(risk_factors) > MAX_TEXT_LENGTH:
-            risk_factors = risk_factors[:MAX_TEXT_LENGTH]
-
-        return business_desc, risk_factors
+        return business_desc, risk_factors, mda
 
     def _get_section(self, filing_obj, attr_names: list[str]) -> str | None:
         """Try multiple attribute names to find a section."""

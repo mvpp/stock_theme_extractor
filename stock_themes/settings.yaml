@@ -22,8 +22,9 @@ llm:
   default_provider: kimi
   market_cap_threshold: 100000000  # $100M — includes small-cap biotech
   delay_seconds: 0.5
-  max_input_chars: 6000  # truncate SEC text to this many chars for LLM input
+  max_input_chars: 200000  # ~100K tokens. Full Item 1 + MD&A; truncate Item 1A if needed
   similarity_threshold: 0.60  # min cosine sim to map LLM theme -> canonical (fallback after normalizer)
+  head_ratio: 0.7  # when truncating: 70% from start, 30% from end
 
 # Semantic filter
 semantic:

@@ -30,8 +30,9 @@ class CompanyProfile:
     website: str | None = None
     # Text sources
     business_summary: str | None = None  # Yahoo Finance short summary
-    business_description: str | None = None  # SEC 10-K/Q/S-1 full text
-    risk_factors: str | None = None  # SEC Item 1A
+    business_description: str | None = None  # SEC Item 1 (Business)
+    risk_factors: str | None = None  # SEC Item 1A (Risk Factors)
+    mda: str | None = None  # SEC Item 7 (Management Discussion & Analysis)
     # Patent data
     patent_titles: list[str] = field(default_factory=list)
     patent_cpc_codes: list[str] = field(default_factory=list)

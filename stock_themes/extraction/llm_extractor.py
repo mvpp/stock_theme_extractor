@@ -8,6 +8,7 @@ import logging
 from stock_themes.config import (
     LLM_API_KEY, LLM_BASE_URL, LLM_MODEL,
     LLM_MAX_INPUT_CHARS, LLM_SIMILARITY_THRESHOLD,
+    LLM_HEAD_RATIO,
 )
 from stock_themes.models import CompanyProfile, Theme, OpenTheme, ExtractionMethod
 
@@ -76,26 +77,62 @@ class LLMExtractor:
         return self._map_to_canonical(raw_themes)
 
     def _build_prompt(self, profile: CompanyProfile) -> str:
-        """Build prompt with intact SEC text (not chunked)."""
-        parts = [f"Company: {profile.name} ({profile.ticker})"]
+        """Build prompt with structured SEC sections (Item 1, MD&A, Item 1A).
 
+        Budget allocation strategy:
+        1. Full Item 1 (Business Description) — core identity, products, pipeline
+        2. Full Item 7 (MD&A) — forward-looking strategy, milestones, progress
+        3. Item 1A (Risk Factors) — remaining budget, head+tail truncation
+        """
+        budget = LLM_MAX_INPUT_CHARS
+
+        parts = [f"Company: {profile.name} ({profile.ticker})"]
         if profile.sector:
             parts.append(f"Sector: {profile.sector}")
         if profile.industry:
             parts.append(f"Industry: {profile.industry}")
 
-        # Send intact SEC text truncated to max_input_chars
+        used = sum(len(p) for p in parts) + len(parts) * 2  # account for \n\n joins
+        has_sec_text = False
+
+        # Priority 1: Full business description (Item 1)
         if profile.business_description:
-            text = profile.business_description[:LLM_MAX_INPUT_CHARS]
-            if profile.risk_factors:
-                remaining = LLM_MAX_INPUT_CHARS - len(text)
-                if remaining > 500:
-                    text += "\n\nRisk Factors:\n" + profile.risk_factors[:remaining]
-            parts.append(f"Business description:\n{text}")
-        elif profile.business_summary:
-            parts.append(f"Business summary:\n{profile.business_summary}")
-        else:
-            return ""
+            parts.append(f"Business Description (Item 1):\n{profile.business_description}")
+            used += len(profile.business_description) + 35
+            has_sec_text = True
+
+        # Priority 2: Full MD&A (Item 7)
+        if profile.mda:
+            parts.append(
+                f"Management Discussion & Analysis (Item 7):\n{profile.mda}"
+            )
+            used += len(profile.mda) + 50
+            has_sec_text = True
+
+        # Priority 3: Risk factors with remaining budget
+        if profile.risk_factors:
+            remaining = budget - used
+            if remaining > 500:
+                text = profile.risk_factors
+                if len(text) <= remaining:
+                    parts.append(f"Risk Factors (Item 1A):\n{text}")
+                else:
+                    head = int(remaining * LLM_HEAD_RATIO)
+                    tail = remaining - head
+                    truncated = text[:head] + "\n...\n" + text[-tail:]
+                    parts.append(f"Risk Factors (Item 1A):\n{truncated}")
+                    logger.debug(
+                        f"Risk factors truncated: {len(text)} -> {remaining} chars "
+                        f"(head={head}, tail={tail})"
+                    )
+                has_sec_text = True
+
+        # Fallback: Yahoo Finance summary if no SEC text at all
+        if not has_sec_text:
+            if profile.business_summary:
+                parts.append(f"Business Summary:\n{profile.business_summary}")
+            else:
+                return ""
 
         return "\n\n".join(parts)
 
@@ -196,7 +233,7 @@ class LLMExtractor:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.6,
-                max_tokens=800,
+                max_tokens=2000,
                 extra_body={"thinking": {"type": "disabled"}},
             )
             content = response.choices[0].message.content

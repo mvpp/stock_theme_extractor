@@ -151,7 +151,7 @@ class DataPipeline:
         scalar_fields = [
             "name", "sector", "industry", "sic_code", "market_cap",
             "exchange", "employees", "website",
-            "business_summary", "business_description", "risk_factors",
+            "business_summary", "business_description", "risk_factors", "mda",
             "news_tone", "social_text",
         ]
         for field_name in scalar_fields:

@@ -46,6 +46,7 @@ LLM_MARKET_CAP_THRESHOLD = _llm["market_cap_threshold"]
 LLM_DELAY_SECONDS = _llm["delay_seconds"]
 LLM_MAX_INPUT_CHARS = _llm["max_input_chars"]
 LLM_SIMILARITY_THRESHOLD = _llm["similarity_threshold"]
+LLM_HEAD_RATIO = _llm.get("head_ratio", 0.7)
 
 # --- Semantic filter ---
 _semantic = _cfg["semantic"]

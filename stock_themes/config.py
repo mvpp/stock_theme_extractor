@@ -89,6 +89,19 @@ _narrative = _cfg["narrative"]
 NARRATIVE_MAX_TITLES = _narrative["max_titles"]
 NARRATIVE_MAX_THEMES = _narrative["max_themes"]
 
+# --- Unified query layer ---
+_unified = _cfg.get("unified", {})
+UNIFIED_QUALITY_WEIGHTS = _unified.get("quality_weights", {"confidence": 0.6, "distinctiveness": 0.4})
+UNIFIED_THRESHOLDS = _unified.get("thresholds", {
+    "llm": {"min_confidence": 0.5, "min_distinctiveness": 0.15, "min_quality": 0.35},
+    "narrative": {"min_confidence": 0.6, "min_distinctiveness": 0.10, "min_quality": 0.40},
+})
+UNIFIED_MAX_MAPPED_SIM = _unified.get("max_mapped_similarity", 0.85)
+UNIFIED_PROMOTION = _unified.get("promotion", {
+    "min_stock_count": 5, "min_avg_confidence": 0.6,
+    "min_avg_distinctiveness": 0.3, "min_avg_quality": 0.45,
+})
+
 # --- Batch processing ---
 BATCH_SIZE = _cfg["batch_size"]
 

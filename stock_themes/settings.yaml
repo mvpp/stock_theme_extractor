@@ -74,6 +74,27 @@ narrative:
   max_titles: 20   # max news titles to send to LLM
   max_themes: 5    # max narrative themes per stock
 
+# Unified query layer (combining canonical + open themes)
+unified:
+  quality_weights:
+    confidence: 0.6
+    distinctiveness: 0.4
+  thresholds:
+    llm:
+      min_confidence: 0.5
+      min_distinctiveness: 0.15
+      min_quality: 0.35
+    narrative:
+      min_confidence: 0.6
+      min_distinctiveness: 0.10
+      min_quality: 0.40
+  max_mapped_similarity: 0.85  # suppress open themes that nearly duplicate a canonical
+  promotion:
+    min_stock_count: 5
+    min_avg_confidence: 0.6
+    min_avg_distinctiveness: 0.3
+    min_avg_quality: 0.45
+
 # Batch processing
 batch_size: 50
 

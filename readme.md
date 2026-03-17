@@ -7,6 +7,8 @@ A Python library that generates investment themes for all US stocks and stores t
 - **Canonical themes** — mapped to a fixed taxonomy of ~200 themes for cross-stock comparison and ETF mapping
 - **Open themes** — free-form themes from LLM and news that capture specifics the taxonomy can't (e.g., "breast cancer immunotherapy", "HER2/neu targeted therapy", "biotech catalyst", "penny stock")
 
+Both tiers are combined via a **unified query layer** with quality filtering, so downstream consumers see one ranked list per stock.
+
 ---
 
 ## Architecture
@@ -18,7 +20,7 @@ A Python library that generates investment themes for all US stocks and stores t
 | Provider | Data | Key required |
 |---|---|---|
 | Yahoo Finance | Sector, industry, market cap, business summary, news headlines | No |
-| SEC EDGAR | 10-Q → 10-K → S-1 business description + risk factors | `SEC_EDGAR_EMAIL` |
+| SEC EDGAR | 10-K → Item 1 (Business) + Item 1A (Risk Factors) + Item 7 (MD&A), extracted as separate sections | `SEC_EDGAR_EMAIL` |
 
 **Pass 2 — Enrichment providers** (need company name from Pass 1):
 
@@ -32,11 +34,28 @@ A Python library that generates investment themes for all US stocks and stores t
 
 News titles are deduplicated across all providers (normalized lowercase comparison).
 
+### Smart SEC Section Extraction
+
+For 10-K filings, three sections are extracted separately via edgartools:
+
+| Section | Attribute | Typical size | Content |
+|---|---|---|---|
+| Item 1 (Business) | `obj.business` | 15K–75K chars | Company overview, products, pipeline |
+| Item 1A (Risk Factors) | `obj.risk_factors` | 50K–200K chars | Competitive threats, regulatory risks |
+| Item 7 (MD&A) | `obj.management_discussion` | 10K–20K chars | Forward-looking clinical/strategic priorities |
+
+**LLM budget allocation** (200K chars ≈ 100K tokens):
+1. Full Item 1 (Business) — always included
+2. Full Item 7 (MD&A) — always included
+3. Item 1A (Risk Factors) — with remaining budget; uses **70/30 head+tail truncation** if oversized (captures overview risks from start + specific/recent risks from end)
+
+For 10-Q: MD&A is the primary business text. For S-1: no MD&A available.
+
 ### Theme Extraction (3 layers)
 
 **Layer 1 — LLM Theme Discovery** (stocks with market cap ≥ $100M):
 
-Sends intact SEC 10-K text (truncated to 6,000 chars, preserving narrative structure) to an LLM. The LLM extracts up to 20 free-form themes with confidence scores. These are then mapped to canonical taxonomy via a two-pass strategy:
+Sends SEC text (up to 200K chars with smart budget allocation across Item 1/7/1A) to an LLM. The LLM extracts up to 20 free-form themes with confidence scores. These are then mapped to canonical taxonomy via a two-pass strategy:
 
 1. **Normalizer alias lookup** — exact match against 150+ aliases (fast, high precision)
 2. **Embedding similarity fallback** — cosine similarity ≥ 0.60 against theme embeddings using `all-MiniLM-L6-v2`
@@ -81,6 +100,52 @@ All canonical themes are grouped by normalized name, then scored:
 - Clinical stage dedup: keeps only the most advanced stage (e.g., Phase 3 beats Phase 1)
 
 Final output: top 10 canonical themes + all open themes per stock.
+
+### Hierarchical Theme Taxonomy
+
+A hand-curated tree (`taxonomy.yaml`) organizes ~129 themes into ~45 root families:
+
+```
+artificial intelligence
+├── generative ai
+│   └── large language models
+├── machine learning
+│   └── deep learning
+├── computer vision
+├── natural language processing
+├── responsible ai
+└── healthcare ai
+```
+
+**Family-aware confidence pooling** in the ensemble:
+- Groups themes by root ancestor family
+- Breadth bonus: +0.03 per additional family member (capped at +0.10)
+- Sibling corroboration: 30% of avg sibling confidence, scaled by breadth
+- Keeps deepest 3 themes per family (most specific leaves)
+
+**Tree-aware querying**: `find_stocks("artificial intelligence")` automatically expands to all descendants (generative ai, machine learning, deep learning, etc.) via BFS traversal.
+
+An offline clustering script (`scripts/suggest_taxonomy.py`) uses agglomerative clustering on theme embeddings to suggest new taxonomy groupings.
+
+### Unified Query Layer
+
+Canonical and open themes are combined via three strategies:
+
+**1. Unified per-ticker query** (`get_all_themes(ticker)`):
+- Returns canonical + quality-filtered open themes in one ranked list
+- Each result tagged with `tier` ("canonical" or "open")
+- Open themes filtered by composite quality score: `quality = 0.6 × confidence + 0.4 × distinctiveness`
+- Source-specific thresholds: LLM themes (min confidence 0.5, quality 0.35) vs narrative themes (min confidence 0.6, quality 0.40)
+- Open themes >85% similar to a canonical theme are suppressed as redundant
+
+**2. Semantic bridging** (in `find_stocks()`):
+- When canonical search (with taxonomy descendants) returns zero results, falls back to LIKE search on `open_themes` with quality filters
+- E.g., `find_stocks("breast cancer")` finds stocks via their open themes even though "breast cancer" isn't a canonical theme
+
+**3. Promotion pipeline** (`suggest_promotions()`):
+- Identifies open themes appearing in 5+ stocks with high avg confidence and distinctiveness
+- Returns human-reviewable candidates with nearest canonical mapping for taxonomy placement
+- No auto-promotion — adding to canonical requires editing `taxonomy.yaml` and `themes.py`
 
 ### Database Schema
 
@@ -163,11 +228,15 @@ Key settings:
 | `llm.default_provider` | `kimi` | Which LLM to use |
 | `llm.market_cap_threshold` | `100000000` ($100M) | Minimum market cap for LLM extraction |
 | `llm.similarity_threshold` | `0.60` | Cosine similarity cutoff for LLM theme → canonical mapping |
-| `llm.max_input_chars` | `6000` | SEC text truncation for LLM input |
+| `llm.max_input_chars` | `200000` | SEC text budget for LLM input (~100K tokens) |
+| `llm.head_ratio` | `0.7` | When truncating oversized sections: 70% from start, 30% from end |
 | `corpus.rebuild_every_n_tickers` | `500` | How often to rebuild TF-IDF matrix |
 | `narrative.max_titles` | `20` | Max news headlines for narrative LLM call |
 | `narrative.max_themes` | `5` | Max narrative themes per stock |
 | `semantic.similarity_threshold` | `0.6` | Chunk pre-filtering threshold |
+| `unified.quality_weights` | `{confidence: 0.6, distinctiveness: 0.4}` | Composite quality score weights for open themes |
+| `unified.max_mapped_similarity` | `0.85` | Suppress open themes too similar to canonical |
+| `unified.promotion.min_stock_count` | `5` | Min stocks for promotion candidate |
 
 ### Switching LLM providers
 
@@ -235,6 +304,42 @@ build_database(tickers=["AAPL", "NVDA", "GLSI"], skip_existing=False)
 ---
 
 ## Querying
+
+### Unified query (canonical + open themes combined)
+
+```python
+from stock_themes.db.queries import get_all_themes
+
+# All themes for a stock, quality-filtered and ranked
+for t in get_all_themes("NVDA"):
+    print(f"  [{t['tier']:9s}] {t['confidence']:.0%}  {t['name']}")
+```
+
+### Find stocks by theme (with semantic bridging)
+
+```python
+from stock_themes.db.queries import find_stocks
+
+# Canonical theme — expands to all taxonomy descendants
+for s in find_stocks("artificial intelligence"):
+    print(f"  {s['ticker']}  {s['name']}  ({s['confidence']:.0%})")
+
+# Non-canonical query — falls back to open themes automatically
+for s in find_stocks("breast cancer"):
+    print(f"  {s['ticker']}  {s['name']}  ({s['confidence']:.0%})  [{s.get('tier', 'canonical')}]")
+```
+
+### Promotion candidates (open → canonical)
+
+```python
+from stock_themes.db.queries import suggest_promotions
+
+# Open themes appearing in 5+ stocks with high quality
+for c in suggest_promotions():
+    print(f"  {c['theme_text']:30s}  stocks={c['stock_count']}  quality={c['avg_quality']:.2f}")
+```
+
+### Direct store access
 
 ```python
 from stock_themes.db.store import ThemeStore
@@ -311,9 +416,10 @@ stock_themes/
 │   ├── config.py                 # Loads YAML + .env, exports constants
 │   ├── models.py                 # Theme, OpenTheme, ThemeResult, CompanyProfile
 │   ├── batch.py                  # Batch processor with corpus rebuild
+│   ├── taxonomy.yaml             # Hierarchical theme tree (~45 families, 129 themes)
 │   ├── data/                     # 7 data providers
 │   │   ├── yahoo.py              # Yahoo Finance (core)
-│   │   ├── sec_edgar.py          # SEC EDGAR (core)
+│   │   ├── sec_edgar.py          # SEC EDGAR — Item 1/1A/7 extraction (core)
 │   │   ├── finnhub.py            # Finnhub news (enrichment)
 │   │   ├── news.py               # GDELT news (enrichment)
 │   │   ├── marketaux.py          # MarketAux news (enrichment)
@@ -321,7 +427,7 @@ stock_themes/
 │   │   ├── social.py             # StockTwits (enrichment)
 │   │   └── pipeline.py           # Two-pass orchestration + merge
 │   ├── extraction/               # 8 theme extractors
-│   │   ├── ensemble.py           # Merge + rank + clinical stage dedup
+│   │   ├── ensemble.py           # Merge + rank + family pooling + clinical stage dedup
 │   │   ├── llm_extractor.py      # LLM → canonical + open themes
 │   │   ├── narrative_extractor.py # News headlines → market narrative themes
 │   │   ├── keyword_extractor.py  # Regex patterns (~60 themes)
@@ -338,10 +444,15 @@ stock_themes/
 │   │   └── chunker.py            # Text chunking
 │   ├── taxonomy/                 # ~200 canonical themes
 │   │   ├── themes.py             # Theme descriptions + categories
-│   │   └── normalizer.py         # 150+ aliases for normalization
+│   │   ├── normalizer.py         # 150+ aliases for normalization
+│   │   └── tree.py               # ThemeTree — hierarchical parent/child traversal
 │   └── db/                       # SQLite persistence
 │       ├── schema.py             # Table definitions (5 tables)
-│       └── store.py              # CRUD operations
+│       ├── store.py              # CRUD operations + filtered queries
+│       └── queries.py            # Unified query API (get_all_themes, find_stocks, suggest_promotions)
+│
+├── scripts/
+│   └── suggest_taxonomy.py       # Offline clustering to suggest taxonomy groupings
 │
 ~/.cache/stock_themes/            # Auto-created cache
 ├── theme_embeddings.pt           # Cached theme vectors

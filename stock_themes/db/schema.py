@@ -62,6 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_stocks_market_cap ON stocks(market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_social_ticker_date ON social_messages(ticker, collected_at);
 CREATE INDEX IF NOT EXISTS idx_open_themes_ticker ON open_themes(ticker);
 CREATE INDEX IF NOT EXISTS idx_open_themes_text ON open_themes(theme_text);
+CREATE INDEX IF NOT EXISTS idx_open_themes_confidence ON open_themes(confidence DESC);
 """
 
 

@@ -254,6 +254,83 @@ class ThemeStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_filtered_open_themes(self, ticker: str,
+                                  min_confidence: float = 0.5,
+                                  min_distinctiveness: float = 0.15,
+                                  max_mapped_similarity: float = 0.85) -> list[dict]:
+        """Return open themes for a ticker that pass quality filters.
+
+        Filters:
+          - confidence >= min_confidence
+          - distinctiveness >= min_distinctiveness
+          - mapped_similarity <= max_mapped_similarity (suppress near-duplicates of canonical)
+        """
+        rows = self.conn.execute(
+            """SELECT theme_text, confidence, distinctiveness, source,
+                      evidence, mapped_canonical, mapped_similarity
+               FROM open_themes
+               WHERE ticker = ?
+                 AND confidence >= ?
+                 AND distinctiveness >= ?
+                 AND (mapped_similarity IS NULL OR mapped_similarity <= ?)
+               ORDER BY confidence DESC""",
+            (ticker.upper(), min_confidence, min_distinctiveness,
+             max_mapped_similarity),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def search_open_themes(self, query: str,
+                           min_confidence: float = 0.5,
+                           min_distinctiveness: float = 0.15,
+                           max_mapped_similarity: float = 0.85) -> list[dict]:
+        """Cross-stock search on open theme text with quality filters.
+
+        Used by semantic bridging: when canonical find_stocks() returns nothing,
+        fall back to searching open_themes via LIKE.
+        """
+        rows = self.conn.execute(
+            """SELECT s.ticker, s.name, s.market_cap,
+                      ot.theme_text, ot.confidence, ot.distinctiveness,
+                      ot.source, ot.mapped_canonical, ot.mapped_similarity
+               FROM open_themes ot
+               JOIN stocks s ON s.ticker = ot.ticker
+               WHERE ot.theme_text LIKE ?
+                 AND ot.confidence >= ?
+                 AND ot.distinctiveness >= ?
+                 AND (ot.mapped_similarity IS NULL OR ot.mapped_similarity <= ?)
+               ORDER BY ot.confidence DESC""",
+            (f"%{query}%", min_confidence, min_distinctiveness,
+             max_mapped_similarity),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_promotion_candidates(self, min_stock_count: int = 5,
+                                  min_avg_confidence: float = 0.6,
+                                  min_avg_distinctiveness: float = 0.3) -> list[dict]:
+        """Identify open themes ready for promotion to canonical.
+
+        Returns themes appearing across min_stock_count+ stocks with high
+        average confidence and distinctiveness. Each result includes the
+        nearest mapped_canonical for taxonomy placement hints.
+        """
+        rows = self.conn.execute(
+            """SELECT theme_text,
+                      COUNT(*) as stock_count,
+                      AVG(confidence) as avg_confidence,
+                      AVG(distinctiveness) as avg_distinctiveness,
+                      GROUP_CONCAT(ticker, ', ') as tickers,
+                      mapped_canonical,
+                      AVG(mapped_similarity) as avg_mapped_similarity
+               FROM open_themes
+               GROUP BY theme_text
+               HAVING stock_count >= ?
+                  AND avg_confidence >= ?
+                  AND avg_distinctiveness >= ?
+               ORDER BY stock_count DESC, avg_confidence DESC""",
+            (min_stock_count, min_avg_confidence, min_avg_distinctiveness),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def get_theme_distribution(self) -> list[dict]:
         rows = self.conn.execute(
             """SELECT t.name, t.category, COUNT(*) as stock_count,

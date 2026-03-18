@@ -18,7 +18,21 @@
       "Bash(.venv/bin/python -m py_compile scripts/suggest_taxonomy.py)",
       "Bash(find /Users/xihanliu/Programs/stock_themes -type d -not -path */.* -not -path */__pycache__* -not -path *.egg-info* -not -path .venv*)",
       "Bash(find /Users/xihanliu/Programs/stock_themes -type f -name *.html -o -name *.jsx -o -name *.tsx -o -name *.vue -o -name *.svelte)",
-      "Bash(find /Users/xihanliu/Programs/stock_themes/ -name *.db -type f)"
+      "Bash(find /Users/xihanliu/Programs/stock_themes/ -name *.db -type f)",
+      "Bash(mkdir -p /Users/xihanliu/Programs/stock_themes/dashboard/frontend)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "WebFetch(domain:www.duodecimal.capital)",
+      "Bash(PYTHONPATH=api python3 -c \"from themes_api.app import app; print\\(''App loaded OK''\\)\")",
+      "Bash(PYTHONPATH=api .venv/bin/python -c \":*)",
+      "Bash(curl -s 'http://localhost:8000/api/v1/themes/top?limit=3')",
+      "Bash(curl -s 'http://localhost:8000/api/v1/themes/emerging?limit=3')",
+      "Bash(curl -s 'http://localhost:8000/api/v1/narratives')",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s 'http://localhost:8000/api/v1/themes/artificial%20intelligence/tradeability')",
+      "Bash(curl -s 'http://localhost:8000/api/v1/stocks/NVDA')"
     ]
   }
 }

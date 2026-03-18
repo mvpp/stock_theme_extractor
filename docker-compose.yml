@@ -1,0 +1,18 @@
+services:
+  api:
+    build: ./api
+    volumes:
+      - ./data:/data
+    environment:
+      STOCK_THEMES_DB: /data/stock_themes.db
+      TAXONOMY_YAML_PATH: /data/taxonomy.yaml
+      CORS_ORIGINS: "https://themes.duodecimal.capital,http://localhost:5173,http://localhost:3000"
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./dashboard/frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api

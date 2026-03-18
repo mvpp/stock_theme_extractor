@@ -14,3 +14,5 @@ logs/
 .pytest_cache/
 .mypy_cache/
 .claude/
+node_modules/
+dashboard/frontend/dist/

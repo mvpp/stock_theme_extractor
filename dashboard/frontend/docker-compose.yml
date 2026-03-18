@@ -1,0 +1,8 @@
+services:
+  dashboard:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: https://api.duodecimal.capital/api/v1
+    ports:
+      - "80:80"

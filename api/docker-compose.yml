@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    volumes:
+      - ./data:/data
+    environment:
+      STOCK_THEMES_DB: /data/stock_themes.db
+      TAXONOMY_YAML_PATH: /data/taxonomy.yaml
+      CORS_ORIGINS: https://dashboard.duodecimal.capital
+    ports:
+      - "8000:8000"

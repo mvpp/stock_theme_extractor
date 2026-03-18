@@ -563,6 +563,58 @@ ORDER BY freshness DESC LIMIT 30;
 
 ---
 
+## Interactive Dashboard
+
+A web-based dashboard for thematic trading — three independently deployable components: core extraction library, FastAPI analytics API (`api/`), and React frontend (`dashboard/frontend/`).
+
+**Quick start:**
+
+```bash
+# Install and start the API backend
+cd api && pip install -e .
+STOCK_THEMES_DB=../stock_themes.db TAXONOMY_YAML_PATH=../stock_themes/taxonomy.yaml \
+  uvicorn themes_api.app:app --port 8000
+
+# In another terminal, start the frontend dev server
+cd dashboard/frontend && npm install && npm run dev
+```
+
+**Features:**
+- Top themes ranked by stock count, market cap, or momentum
+- Lifecycle regimes (Emergence / Diffusion / Consensus / Monetization / Decay)
+- Drift detection — tracks how theme stock baskets and sub-theme distributions change over time
+- Bidirectional navigation: click theme to see stocks, click stock to see themes
+- Unified search across themes, stocks, and open themes
+- Human-in-the-loop: promote open themes to canonical with taxonomy placement
+- Interactive taxonomy tree visualization
+
+**Daily snapshot** (required for regime/drift):
+
+```bash
+python scripts/take_snapshot.py --db stock_themes.db
+```
+
+**Docker deployment (combined):**
+
+```bash
+docker compose up
+```
+
+**Separate deployment** (API and frontend on different machines):
+
+```bash
+# API machine
+cd api && docker compose up
+
+# Frontend machine (set API URL at build time)
+cd dashboard/frontend && docker compose up
+# or: docker build --build-arg VITE_API_BASE_URL=https://api.example.com/api/v1 .
+```
+
+See [`implementation_guide.md`](implementation_guide.md) for full API reference, regime definitions, drift algorithm, and architecture details.
+
+---
+
 ## Daily StockTwits Collection
 
 ```bash
@@ -623,13 +675,38 @@ stock_themes/
 │   │   ├── themes.py             # Theme descriptions + categories
 │   │   ├── normalizer.py         # 150+ aliases for normalization
 │   │   └── tree.py               # ThemeTree — hierarchical parent/child traversal
-│   └── db/                       # SQLite persistence
-│       ├── schema.py             # Table definitions (5 tables)
-│       ├── store.py              # CRUD operations + filtered queries
-│       └── queries.py            # Unified query API (get_all_themes, find_stocks, suggest_promotions)
+│   ├── db/                       # SQLite persistence
+│   │   ├── schema.py             # Table definitions (8 tables incl. dashboard history)
+│   │   ├── store.py              # CRUD operations + filtered queries
+│   │   └── queries.py            # Unified query API (get_all_themes, find_stocks, suggest_promotions)
+│   └── dashboard/                # Interactive dashboard (FastAPI backend)
+│       ├── app.py                # FastAPI application + static file serving
+│       ├── deps.py               # Database dependency injection
+│       ├── response_models.py    # Pydantic response schemas
+│       ├── routers/              # API endpoint handlers
+│       │   ├── themes.py         # /api/v1/themes/* (top, detail, regime, drift, history)
+│       │   ├── stocks.py         # /api/v1/stocks/*
+│       │   ├── search.py         # /api/v1/search
+│       │   ├── promotions.py     # /api/v1/promotions/* (candidates, promote, dismiss)
+│       │   ├── taxonomy.py       # /api/v1/taxonomy/tree
+│       │   └── admin.py          # /api/v1/stats, snapshots
+│       └── services/             # Business logic
+│           ├── snapshot.py       # Daily theme snapshot (aggregate + stock membership)
+│           ├── regime.py         # Lifecycle regime classifier (5 stages)
+│           ├── drift.py          # Drift detection (Jaccard + sub-theme shift)
+│           ├── ranking.py        # Theme ranking (volume/momentum/count)
+│           └── promotion.py      # Human-in-the-loop promotion
+│
+├── dashboard/frontend/           # React SPA (Vite + Tailwind + Recharts)
+│   ├── src/
+│   │   ├── api/client.ts         # Typed API client
+│   │   ├── pages/                # DashboardPage, ThemeDetail, StockDetail, Search, Promotion, Taxonomy
+│   │   └── components/           # Layout, SearchBar, RegimeBadge
+│   └── package.json
 │
 ├── scripts/
-│   └── suggest_taxonomy.py       # Offline clustering to suggest taxonomy groupings
+│   ├── suggest_taxonomy.py       # Offline clustering to suggest taxonomy groupings
+│   └── take_snapshot.py          # Daily theme snapshot CLI
 │
 ~/.cache/stock_themes/            # Auto-created cache
 ├── theme_embeddings.pt           # Cached theme vectors

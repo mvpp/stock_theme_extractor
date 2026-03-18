@@ -5,6 +5,14 @@ from enum import Enum
 from datetime import datetime
 
 
+@dataclass
+class DatedArticle:
+    """A news article with its publication date."""
+
+    title: str
+    published_at: datetime | None = None
+
+
 class ExtractionMethod(Enum):
     SIC_MAPPING = "sic"
     KEYWORD_NLP = "keyword"
@@ -44,6 +52,8 @@ class CompanyProfile:
     # Social data
     social_text: str | None = None  # aggregated StockTwits messages
     social_sentiment: dict | None = None  # {"bullish": 65, "bearish": 35}
+    # Dated articles (news with timestamps for time decay)
+    dated_articles: list[DatedArticle] = field(default_factory=list)
     # Metadata
     data_sources: list[str] = field(default_factory=list)
 
@@ -66,10 +76,11 @@ class OpenTheme:
     text: str                    # raw theme text (e.g., "breast cancer immunotherapy")
     confidence: float            # LLM confidence (0.0-1.0)
     distinctiveness: float = 0.0 # BM25 corpus distinctiveness (0-1)
-    source: str = "llm"         # "llm", "narrative"
+    source: str = "llm"         # "llm", "narrative", "13f"
     evidence: str | None = None
     mapped_canonical: str | None = None  # nearest canonical theme, if any
     mapped_similarity: float = 0.0       # cosine sim to that canonical
+    freshness: float | None = None       # time decay score at extraction (0-1)
 
 
 @dataclass
@@ -85,6 +96,29 @@ class ThemeResult:
 
     def theme_names(self, min_confidence: float = 0.0) -> list[str]:
         return [t.name for t in self.themes if t.confidence >= min_confidence]
+
+
+@dataclass
+class Holding:
+    """A single position from a 13F filing."""
+
+    ticker: str
+    name: str
+    shares: int
+    value: float  # in thousands
+
+
+@dataclass
+class HoldingChange:
+    """A change in position between two 13F filings."""
+
+    ticker: str
+    investor_name: str
+    investor_short: str
+    change_type: str  # "new_position", "sold_entire", "added", "trimmed", "unchanged"
+    shares_current: int
+    shares_previous: int
+    pct_change: float  # percentage change in shares
 
 
 @dataclass

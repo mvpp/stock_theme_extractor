@@ -95,6 +95,33 @@ unified:
     min_avg_distinctiveness: 0.3
     min_avg_quality: 0.45
 
+# Time decay (news/social freshness scoring)
+time_decay:
+  fresh_days: 30    # fully fresh within this window
+  stale_days: 365   # fully stale after this
+
+# Company official website news scraping
+company_news:
+  max_articles: 20
+  max_depth: 2
+  rate_limit_seconds: 1.0
+  cache_ttl_hours: 48
+  markdown_services:
+    - "https://markdown.new/{url}"
+    - "https://defuddle.md/{url}"
+    - "https://r.jina.ai/{url}"
+  sitemap_keywords: [news, press, media, blog, release, announcement]
+  common_paths: [/news, /newsroom, /press-releases, /media, /blog, /investors/news]
+
+# Famous investor holdings (13F) — optional addon
+thirteen_f:
+  enabled: false  # opt-in, does not affect main pipeline when false
+  investors_file: investors.yaml
+  cache_ttl_days: 7
+  min_position_value: 1000  # minimum position value (in $thousands) to include
+  change_thresholds:
+    significant_pct: 50  # >50% share change = "significantly added/trimmed"
+
 # Batch processing
 batch_size: 50
 

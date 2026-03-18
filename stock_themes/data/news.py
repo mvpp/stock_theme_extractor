@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import requests
 
@@ -11,7 +12,7 @@ from stock_themes.config import (
     GDELT_API_URL, GDELT_MAX_RECORDS, GDELT_TIMESPAN,
 )
 from stock_themes.exceptions import ProviderError
-from stock_themes.models import CompanyProfile
+from stock_themes.models import CompanyProfile, DatedArticle
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class GDELTProvider:
         articles = data.get("articles", [])
 
         titles = []
+        dated = []
         themes = []
         tones = []
 
@@ -70,6 +72,15 @@ class GDELTProvider:
             title = article.get("title", "")
             if title:
                 titles.append(title)
+                # GDELT returns "seendate" in format "20250615T120000Z"
+                seendate = article.get("seendate", "")
+                pub_dt = None
+                if seendate:
+                    try:
+                        pub_dt = datetime.strptime(seendate, "%Y%m%dT%H%M%SZ")
+                    except (ValueError, TypeError):
+                        pass
+                dated.append(DatedArticle(title=title, published_at=pub_dt))
 
             # GDELT encodes themes in the segtitle field or theme field
             article_themes = article.get("themes", [])
@@ -98,6 +109,7 @@ class GDELTProvider:
             ticker=ticker.upper(),
             name=company_name,
             news_titles=titles,
+            dated_articles=dated,
             news_themes=themes,
             news_tone=avg_tone,
             data_sources=["gdelt"],

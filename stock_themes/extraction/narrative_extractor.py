@@ -50,16 +50,34 @@ class NarrativeExtractor:
         return bool(self.api_key)
 
     def extract(self, profile: CompanyProfile) -> list[OpenTheme]:
-        """Extract narrative themes from news titles using LLM."""
+        """Extract narrative themes from news titles using LLM.
+
+        Uses dated_articles (sorted by recency) when available, falling
+        back to news_titles for backward compatibility.  Applies a
+        freshness multiplier to theme confidences so that themes derived
+        from stale headlines are penalised.
+        """
         if not self.is_available():
             logger.debug("Narrative extractor not available (no API key)")
             return []
 
-        if not profile.news_titles:
+        if not profile.news_titles and not profile.dated_articles:
             logger.debug(f"{profile.ticker}: no news titles for narrative extraction")
             return []
 
-        titles = profile.news_titles[:NARRATIVE_MAX_TITLES]
+        # Prefer dated_articles sorted by recency; fall back to news_titles
+        from stock_themes.extraction.time_decay import freshness_score, weighted_articles
+
+        if profile.dated_articles:
+            wa = weighted_articles(profile.dated_articles)
+            selected = wa[:NARRATIVE_MAX_TITLES]
+            titles = [a.title for a, _ in selected]
+            used_articles = [a for a, _ in selected]
+            freshness = freshness_score(used_articles)
+        else:
+            titles = profile.news_titles[:NARRATIVE_MAX_TITLES]
+            freshness = 0.5  # unknown dates — half weight
+
         headlines = "\n".join(f"- {t}" for t in titles)
 
         prompt = NARRATIVE_PROMPT.format(
@@ -76,15 +94,16 @@ class NarrativeExtractor:
             text = raw.get("theme", "").strip().lower()
             if not text:
                 continue
+            raw_conf = min(1.0, max(0.0, raw.get("confidence", 0.5)))
             open_themes.append(OpenTheme(
                 text=text,
-                confidence=min(1.0, max(0.0, raw.get("confidence", 0.5))),
+                confidence=round(raw_conf * freshness, 3),
                 source="narrative",
-                evidence=f"Narrative: from {len(titles)} headlines",
+                evidence=f"Narrative: from {len(titles)} headlines (freshness={freshness:.2f})",
             ))
 
         logger.info(f"{profile.ticker}: narrative extracted {len(open_themes)} themes "
-                     f"from {len(titles)} headlines")
+                     f"from {len(titles)} headlines (freshness={freshness:.2f})")
         return open_themes
 
     def _call_llm(self, prompt: str) -> list[dict]:

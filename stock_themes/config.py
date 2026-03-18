@@ -102,6 +102,37 @@ UNIFIED_PROMOTION = _unified.get("promotion", {
     "min_avg_distinctiveness": 0.3, "min_avg_quality": 0.45,
 })
 
+# --- Time decay ---
+_decay = _cfg.get("time_decay", {})
+DECAY_FRESH_DAYS = _decay.get("fresh_days", 30)
+DECAY_STALE_DAYS = _decay.get("stale_days", 365)
+
+# --- Company news ---
+_company_news = _cfg.get("company_news", {})
+COMPANY_NEWS_MAX_ARTICLES = _company_news.get("max_articles", 20)
+COMPANY_NEWS_MAX_DEPTH = _company_news.get("max_depth", 2)
+COMPANY_NEWS_RATE_LIMIT = _company_news.get("rate_limit_seconds", 1.0)
+COMPANY_NEWS_CACHE_TTL_HOURS = _company_news.get("cache_ttl_hours", 48)
+COMPANY_NEWS_MARKDOWN_SERVICES = _company_news.get("markdown_services", [
+    "https://markdown.new/{url}",
+    "https://defuddle.md/{url}",
+    "https://r.jina.ai/{url}",
+])
+COMPANY_NEWS_SITEMAP_KEYWORDS = _company_news.get(
+    "sitemap_keywords", ["news", "press", "media", "blog", "release", "announcement"]
+)
+COMPANY_NEWS_COMMON_PATHS = _company_news.get(
+    "common_paths", ["/news", "/newsroom", "/press-releases", "/media", "/blog", "/investors/news"]
+)
+
+# --- 13F investor holdings (optional) ---
+_thirteen_f = _cfg.get("thirteen_f", {})
+THIRTEEN_F_ENABLED = _thirteen_f.get("enabled", False)
+THIRTEEN_F_INVESTORS_FILE = _thirteen_f.get("investors_file", "investors.yaml")
+THIRTEEN_F_CACHE_TTL_DAYS = _thirteen_f.get("cache_ttl_days", 7)
+THIRTEEN_F_MIN_POSITION_VALUE = _thirteen_f.get("min_position_value", 1000)
+THIRTEEN_F_SIGNIFICANT_PCT = _thirteen_f.get("change_thresholds", {}).get("significant_pct", 50)
+
 # --- Batch processing ---
 BATCH_SIZE = _cfg["batch_size"]
 

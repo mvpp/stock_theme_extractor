@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from stock_themes.models import ThemeResult
+from stock_themes.thirteen_f_cli import build_investor_themes
 
 
 def get_themes(

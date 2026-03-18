@@ -77,6 +77,12 @@ class DataPipeline:
         except ImportError:
             pass
 
+        try:
+            from stock_themes.data.company_news import CompanyNewsProvider
+            enrichment.append(CompanyNewsProvider())
+        except ImportError:
+            pass
+
         return core, enrichment
 
     def fetch(self, ticker: str, db_path: str | None = None) -> CompanyProfile:
@@ -133,6 +139,12 @@ class DataPipeline:
                         # Live fetch of today's 30 messages
                         profile = provider.fetch(ticker)
                         enrichment_profiles.append(profile)
+                elif provider.name == "company_news":
+                    # Company news needs website URL
+                    profile = provider.fetch(
+                        ticker, company_name=base.name, website=base.website,
+                    )
+                    enrichment_profiles.append(profile)
                 else:
                     # Patents and news need company name
                     profile = provider.fetch(ticker, company_name=base.name)
@@ -165,11 +177,32 @@ class DataPipeline:
             merged.patent_titles.extend(profile.patent_titles)
             merged.patent_cpc_codes.extend(profile.patent_cpc_codes)
             merged.news_themes.extend(profile.news_themes)
+            merged.dated_articles.extend(profile.dated_articles)
             merged.news_titles.extend(profile.news_titles)
 
-        # Deduplicate news titles (normalize: lowercase + strip)
+        # Deduplicate dated_articles by normalized title (keep earliest date)
+        seen_dated: dict[str, "DatedArticle"] = {}
+        for article in merged.dated_articles:
+            key = article.title.strip().lower()
+            if key not in seen_dated:
+                seen_dated[key] = article
+            else:
+                existing = seen_dated[key]
+                if article.published_at and (
+                    not existing.published_at
+                    or article.published_at < existing.published_at
+                ):
+                    seen_dated[key] = article
+        merged.dated_articles = list(seen_dated.values())
+
+        # Derive news_titles from dated_articles + any extra news_titles
         seen_titles: set[str] = set()
         unique_titles: list[str] = []
+        for article in merged.dated_articles:
+            key = article.title.strip().lower()
+            if key not in seen_titles:
+                seen_titles.add(key)
+                unique_titles.append(article.title)
         for title in merged.news_titles:
             key = title.strip().lower()
             if key not in seen_titles:

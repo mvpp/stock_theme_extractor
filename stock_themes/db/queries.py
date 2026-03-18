@@ -189,6 +189,36 @@ def suggest_promotions(db_path: str = "stock_themes.db") -> list[dict]:
         store.close()
 
 
+def get_investor_themes(ticker: str, db_path: str = "stock_themes.db") -> list[dict]:
+    """Get 13F-sourced themes for a ticker."""
+    store = ThemeStore(db_path)
+    try:
+        all_open = store.get_open_themes(ticker)
+        return [t for t in all_open if t.get("source") == "13f"]
+    finally:
+        store.close()
+
+
+def get_stocks_with_investor_activity(
+    investor_short: str, db_path: str = "stock_themes.db",
+) -> list[dict]:
+    """Find all stocks where a specific investor has 13F activity.
+
+    Args:
+        investor_short: Short name (e.g., "buffett", "ark"). Case-insensitive.
+    """
+    store = ThemeStore(db_path)
+    try:
+        return store.search_open_themes(
+            investor_short.lower(),
+            min_confidence=0.0,
+            min_distinctiveness=0.0,
+            max_mapped_similarity=1.0,
+        )
+    finally:
+        store.close()
+
+
 def stats(db_path: str = "stock_themes.db") -> dict:
     """Return database statistics."""
     store = ThemeStore(db_path)

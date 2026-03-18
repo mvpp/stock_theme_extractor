@@ -174,10 +174,11 @@ class ThemeStore:
                     """INSERT INTO open_themes
                            (ticker, theme_text, confidence, distinctiveness,
                             source, evidence, mapped_canonical, mapped_similarity,
-                            updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                            freshness, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
                     (result.ticker, ot.text, ot.confidence, ot.distinctiveness,
-                     ot.source, ot.evidence, ot.mapped_canonical, ot.mapped_similarity),
+                     ot.source, ot.evidence, ot.mapped_canonical, ot.mapped_similarity,
+                     ot.freshness),
                 )
         # with-block commits on clean exit, rolls back on any exception
 

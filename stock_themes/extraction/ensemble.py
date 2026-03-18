@@ -53,10 +53,12 @@ class EnsembleExtractor:
         self,
         use_llm: bool = True,
         max_themes: int = 10,
+        investor_changes: dict | None = None,
     ):
         self.use_llm = use_llm
         self.max_themes = max_themes
         self.normalizer = ThemeNormalizer()
+        self._investor_changes = investor_changes or {}
 
     def extract(self, profile: CompanyProfile) -> ThemeResult:
         all_themes: list[Theme] = []
@@ -90,10 +92,22 @@ class EnsembleExtractor:
         narrative_open = self._run_narrative(profile)
         all_open_themes.extend(narrative_open)
 
-        # 5. Merge and rank canonical themes
+        # 4.5 Run investor holdings extractor (optional, 13F)
+        investor_open = self._run_investor(profile)
+        all_open_themes.extend(investor_open)
+
+        # 5. Apply time decay to NEWS-sourced canonical themes
+        if profile.dated_articles:
+            from stock_themes.extraction.time_decay import freshness_score
+            freshness = freshness_score(profile.dated_articles)
+            for theme in all_themes:
+                if theme.source == ExtractionMethod.NEWS:
+                    theme.confidence = round(theme.confidence * freshness, 3)
+
+        # 6. Merge and rank canonical themes
         ranked = self._merge_and_rank(all_themes)
 
-        # 6. Deduplicate open themes
+        # 7. Deduplicate open themes
         deduped_open = self._dedup_open_themes(all_open_themes)
 
         return ThemeResult(
@@ -135,7 +149,7 @@ class EnsembleExtractor:
 
     def _run_narrative(self, profile: CompanyProfile) -> list[OpenTheme]:
         """Run narrative extractor if LLM is available and news exists."""
-        if not self.use_llm or not profile.news_titles:
+        if not self.use_llm or (not profile.news_titles and not profile.dated_articles):
             return []
 
         from stock_themes.extraction.narrative_extractor import NarrativeExtractor
@@ -147,6 +161,21 @@ class EnsembleExtractor:
             return extractor.extract(profile)
         except Exception as e:
             logger.warning(f"Narrative extractor failed for {profile.ticker}: {e}")
+            return []
+
+    def _run_investor(self, profile: CompanyProfile) -> list[OpenTheme]:
+        """Run investor holdings extractor if 13F data is available."""
+        if not self._investor_changes:
+            return []
+
+        try:
+            from stock_themes.extraction.investor_extractor import InvestorHoldingExtractor
+            extractor = InvestorHoldingExtractor(self._investor_changes)
+            return extractor.extract(profile)
+        except ImportError:
+            return []
+        except Exception as e:
+            logger.warning(f"Investor extractor failed for {profile.ticker}: {e}")
             return []
 
     def _get_extractors(self, profile: CompanyProfile,

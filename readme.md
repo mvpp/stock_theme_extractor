@@ -13,6 +13,75 @@ Both tiers are combined via a **unified query layer** with quality filtering, so
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph DATA["Data Pipeline (per ticker)"]
+        direction TB
+        subgraph PASS1["Pass 1 — Core"]
+            Yahoo["Yahoo Finance<br/><small>sector, industry, mkt cap</small>"]
+            SEC["SEC EDGAR<br/><small>10-K: Item 1 / 1A / 7</small>"]
+        end
+        subgraph PASS2["Pass 2 — Enrichment"]
+            Finnhub["Finnhub<br/><small>news headlines</small>"]
+            GDELT["GDELT<br/><small>news themes</small>"]
+            MarketAux["MarketAux<br/><small>news headlines</small>"]
+            CompanyWeb["Company Website<br/><small>press releases</small>"]
+            Patents["PatentsView<br/><small>patent titles</small>"]
+            StockTwits["StockTwits<br/><small>social text</small>"]
+        end
+        PASS1 -->|"company name"| PASS2
+    end
+
+    subgraph EXTRACT["Theme Extraction"]
+        direction TB
+        subgraph LAYER1["Layer 1 — LLM Discovery"]
+            LLM["LLM extracts themes<br/><small>from SEC text</small>"]
+            MAP["Map to taxonomy<br/><small>alias → embedding</small>"]
+            LLM --> MAP
+        end
+        subgraph LAYER2["Layer 2 — BM25 Scoring"]
+            TFIDF["TF-IDF distinctiveness<br/><small>corpus-wide scoring</small>"]
+        end
+        subgraph LAYER3["Layer 3 — Narratives"]
+            NAR["Narrative LLM call<br/><small>on news headlines</small>"]
+        end
+        subgraph EXTRA["Additional Extractors"]
+            SIC["SIC Mapper"]
+            KW["Keyword Regex"]
+            PAT["Patent Mapper"]
+            EMB["Embedding Matcher"]
+            NEWS["News Extractor"]
+            SOC["Social Extractor"]
+        end
+    end
+
+    subgraph MODIFIERS["Post-Processing"]
+        DECAY["Time Decay<br/><small>half-cosine freshness</small>"]
+        INV["13F Investor Themes<br/><small>optional addon</small>"]
+        ENS["Ensemble Merger<br/><small>weighted avg + family pooling</small>"]
+    end
+
+    subgraph OUTPUT["Output"]
+        CAN["Canonical Themes<br/><small>~200 taxonomy, top 10/stock</small>"]
+        OPEN["Open Themes<br/><small>free-form + narrative + 13F</small>"]
+        UNI["Unified Query Layer<br/><small>quality filtering + bridging</small>"]
+        DB[("SQLite DB")]
+        CAN --> UNI
+        OPEN --> UNI
+        UNI --> DB
+    end
+
+    DATA --> EXTRACT
+    EXTRACT --> MODIFIERS
+    MODIFIERS --> OUTPUT
+
+    style DATA fill:#e8f4f8,stroke:#2196F3
+    style EXTRACT fill:#fff3e0,stroke:#FF9800
+    style MODIFIERS fill:#f3e5f5,stroke:#9C27B0
+    style OUTPUT fill:#e8f5e9,stroke:#4CAF50
+    style INV stroke:#9C27B0,stroke-dasharray: 5 5
+```
+
 ### Data Pipeline (per ticker, two-pass)
 
 **Pass 1 — Core providers** (get company fundamentals + name):
@@ -29,10 +98,11 @@ Both tiers are combined via a **unified query layer** with quality filtering, so
 | Finnhub | Company news headlines (90 days, up to 100 articles) | `FINNHUB_API_KEY` |
 | GDELT | News themes, titles, tone (3 months) | No (public API, rate-limited) |
 | MarketAux | News headlines by ticker | `MARKETAUX_API_TOKEN` |
+| Company Website | Press releases / newsroom articles via sitemap or common paths | No |
 | PatentsView | Patent titles + CPC codes | `PATENTSVIEW_API_KEY` |
 | StockTwits | Social sentiment + discussion text | `STOCKTWITS_ACCESS_TOKEN` |
 
-News titles are deduplicated across all providers (normalized lowercase comparison).
+News titles are deduplicated across all providers (normalized lowercase comparison). All news providers preserve article publication dates as `DatedArticle` objects for time-decay scoring.
 
 ### Smart SEC Section Extraction
 
@@ -79,6 +149,57 @@ A separate LLM call on news headlines extracts market perception themes — how 
 - Event-driven: "M&A target", "short squeeze", "insider buying"
 
 These are stored as open themes with `source="narrative"`.
+
+### Time Decay
+
+All news-derived themes are weighted by article freshness using a half-cosine decay curve:
+
+- **Days 0–30**: score = 1.0 (fresh)
+- **Days 30–365**: cosine decay from 1.0 → 0.0
+- **Days 365+**: score = 0.0 (stale)
+- **Unknown date**: score = 0.5
+
+The freshness score (average decay across a stock's articles) is applied as a confidence multiplier on narrative and news-sourced themes. Stored in `open_themes.freshness`.
+
+### Company Website News
+
+Scrapes press releases and newsroom articles directly from company websites:
+
+1. Tries `{website}/sitemap.xml` — searches for URLs matching keywords (news, press, media, blog, release)
+2. Falls back to common paths (`/news`, `/newsroom`, `/press-releases`, `/media`, `/investors/news`)
+3. Extracts article links (max depth 2, max 20 articles per company)
+4. Converts each article URL to markdown via a service chain:
+   - Primary: `https://markdown.new/{url}`
+   - Fallback 1: `https://defuddle.md/{url}`
+   - Fallback 2: `https://r.jina.ai/{url}`
+5. Extracts title and publication date from the markdown
+
+Articles merge into the existing `dated_articles` pipeline and benefit from time-decay scoring.
+
+### Famous Investor Holdings (13F) — Optional
+
+An **opt-in** addon (disabled by default) that tracks quarterly SEC 13F filings from famous investors and generates narrative themes like "buffett new position" or "ark significantly trimmed".
+
+**How it works:**
+1. Fetches recent 13F-HR filings from SEC EDGAR for each tracked investor
+2. Parses the XML information table (issuer name, shares, value)
+3. Resolves issuer names to tickers via fuzzy matching against the stocks database
+4. Compares current vs previous quarter: detects `new_position`, `sold_entire`, `added`, `trimmed`
+5. Writes open themes with `source="13f"`
+
+**Tracked investors** (15): Buffett (Berkshire), ARK (Cathie Wood), Druckenmiller (Duquesne), Burry (Scion), Ackman (Pershing Square), Dalio (Bridgewater), Tepper (Appaloosa), Einhorn (Greenlight), Klarman (Baupost), Loeb (Third Point), Icahn, Soros, Tiger Global, Coatue, Fundsmith.
+
+**Fully decoupled**: the main `build_database()` pipeline works identically without it. Enable via `thirteen_f.enabled: true` in `settings.yaml`, or run standalone:
+
+```python
+from stock_themes import build_investor_themes
+build_investor_themes(db_path="stock_themes.db")
+```
+
+```bash
+# CLI
+python -m stock_themes.thirteen_f_cli --db stock_themes.db
+```
 
 ### Additional Extractors
 
@@ -153,7 +274,7 @@ Canonical and open themes are combined via three strategies:
 stocks          — ticker, name, sector, industry, market_cap, etc.
 themes          — canonical theme names + categories (FK target)
 stock_themes    — ticker × theme_id with confidence, source, evidence
-open_themes     — free-form themes with distinctiveness scores and nearest canonical mapping
+open_themes     — free-form themes with distinctiveness, freshness, source (llm/narrative/13f), nearest canonical mapping
 social_messages — accumulated StockTwits messages for monthly analysis
 ```
 
@@ -237,6 +358,14 @@ Key settings:
 | `unified.quality_weights` | `{confidence: 0.6, distinctiveness: 0.4}` | Composite quality score weights for open themes |
 | `unified.max_mapped_similarity` | `0.85` | Suppress open themes too similar to canonical |
 | `unified.promotion.min_stock_count` | `5` | Min stocks for promotion candidate |
+| `time_decay.fresh_days` | `30` | Articles newer than this get full weight |
+| `time_decay.stale_days` | `365` | Articles older than this get zero weight |
+| `company_news.max_articles` | `20` | Max articles scraped per company website |
+| `company_news.max_depth` | `2` | Max link-following depth from index pages |
+| `company_news.cache_ttl_hours` | `48` | Cache TTL for scraped articles |
+| `thirteen_f.enabled` | `false` | Enable 13F investor holdings (opt-in) |
+| `thirteen_f.cache_ttl_days` | `7` | Cache TTL for 13F data |
+| `thirteen_f.change_thresholds.significant_pct` | `50` | % change to qualify as "significantly added/trimmed" |
 
 ### Switching LLM providers
 
@@ -295,6 +424,20 @@ build_database(
 build_database(max_tickers=250, refresh_after="2025-01-01")
 ```
 
+### 13F Investor Themes (quarterly, optional)
+
+```bash
+# Run standalone after each quarterly 13F filing season
+python -m stock_themes.thirteen_f_cli --db stock_themes.db
+```
+
+Or from Python:
+
+```python
+from stock_themes import build_investor_themes
+build_investor_themes(db_path="stock_themes.db")
+```
+
 ### Custom ticker list
 
 ```python
@@ -337,6 +480,20 @@ from stock_themes.db.queries import suggest_promotions
 # Open themes appearing in 5+ stocks with high quality
 for c in suggest_promotions():
     print(f"  {c['theme_text']:30s}  stocks={c['stock_count']}  quality={c['avg_quality']:.2f}")
+```
+
+### Investor themes (13F)
+
+```python
+from stock_themes.db.queries import get_investor_themes, get_stocks_with_investor_activity
+
+# All 13F themes for a stock
+for t in get_investor_themes("AAPL"):
+    print(f"  {t['theme_text']}  conf={t['confidence']:.0%}  {t['evidence']}")
+
+# All stocks where Buffett has activity
+for s in get_stocks_with_investor_activity("buffett"):
+    print(f"  {s['ticker']}  {s['theme_text']}")
 ```
 
 ### Direct store access
@@ -384,10 +541,22 @@ HAVING stocks >= 3
 ORDER BY stocks DESC LIMIT 30;
 
 -- Narrative themes (how market sees stocks)
-SELECT ticker, theme_text, confidence
+SELECT ticker, theme_text, confidence, freshness
 FROM open_themes
 WHERE source = 'narrative'
 ORDER BY confidence DESC LIMIT 50;
+
+-- 13F investor themes (requires thirteen_f.enabled)
+SELECT ticker, theme_text, confidence, evidence
+FROM open_themes
+WHERE source = '13f'
+ORDER BY updated_at DESC LIMIT 50;
+
+-- Freshest open themes (highest time-decay scores)
+SELECT ticker, theme_text, confidence, freshness
+FROM open_themes
+WHERE freshness IS NOT NULL
+ORDER BY freshness DESC LIMIT 30;
 ```
 
 ---
@@ -414,22 +583,28 @@ stock_themes/
 ├── stock_themes/
 │   ├── settings.yaml             # All non-secret config
 │   ├── config.py                 # Loads YAML + .env, exports constants
-│   ├── models.py                 # Theme, OpenTheme, ThemeResult, CompanyProfile
-│   ├── batch.py                  # Batch processor with corpus rebuild
+│   ├── models.py                 # Theme, OpenTheme, ThemeResult, CompanyProfile, DatedArticle, Holding, HoldingChange
+│   ├── batch.py                  # Batch processor with corpus rebuild + optional 13F
+│   ├── thirteen_f_cli.py         # Standalone 13F investor themes runner
 │   ├── taxonomy.yaml             # Hierarchical theme tree (~45 families, 129 themes)
-│   ├── data/                     # 7 data providers
+│   ├── data/                     # 9 data providers
 │   │   ├── yahoo.py              # Yahoo Finance (core)
 │   │   ├── sec_edgar.py          # SEC EDGAR — Item 1/1A/7 extraction (core)
-│   │   ├── finnhub.py            # Finnhub news (enrichment)
-│   │   ├── news.py               # GDELT news (enrichment)
-│   │   ├── marketaux.py          # MarketAux news (enrichment)
+│   │   ├── finnhub.py            # Finnhub news (enrichment, dated articles)
+│   │   ├── news.py               # GDELT news (enrichment, dated articles)
+│   │   ├── marketaux.py          # MarketAux news (enrichment, dated articles)
+│   │   ├── company_news.py       # Company website news (sitemap/newsroom scraper)
 │   │   ├── patents.py            # PatentsView (enrichment)
 │   │   ├── social.py             # StockTwits (enrichment)
+│   │   ├── thirteen_f.py         # SEC 13F-HR investor holdings (optional)
+│   │   ├── investors.yaml        # Tracked investor registry (15 investors)
 │   │   └── pipeline.py           # Two-pass orchestration + merge
-│   ├── extraction/               # 8 theme extractors
+│   ├── extraction/               # 10 theme extractors
 │   │   ├── ensemble.py           # Merge + rank + family pooling + clinical stage dedup
 │   │   ├── llm_extractor.py      # LLM → canonical + open themes
-│   │   ├── narrative_extractor.py # News headlines → market narrative themes
+│   │   ├── narrative_extractor.py # News headlines → market narrative themes (time-decay aware)
+│   │   ├── investor_extractor.py # 13F holdings → investor narrative themes
+│   │   ├── time_decay.py         # Half-cosine freshness scoring
 │   │   ├── keyword_extractor.py  # Regex patterns (~60 themes)
 │   │   ├── embedding_matcher.py  # Cosine similarity matching
 │   │   ├── sic_mapper.py         # SIC code → theme
@@ -467,7 +642,7 @@ stock_themes/
 
 | Item | Cost |
 |---|---|
-| Yahoo Finance, SEC EDGAR, GDELT, PatentsView, StockTwits | Free |
+| Yahoo Finance, SEC EDGAR, GDELT, PatentsView, StockTwits, Company News, 13F | Free |
 | Finnhub (free tier: 60 calls/min) | Free |
 | Sentence-transformers (local CPU) | Free |
 | LLM (2 calls/stock: theme extraction + narrative) | ~$10/month for all stocks ≥$100M |

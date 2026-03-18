@@ -9,7 +9,7 @@ import requests
 
 from stock_themes.config import FAKE_USER_AGENT, PROXY_URL, FINNHUB_API_KEY
 from stock_themes.exceptions import ProviderError
-from stock_themes.models import CompanyProfile
+from stock_themes.models import CompanyProfile, DatedArticle
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +56,20 @@ class FinnhubProvider:
             articles = []
 
         titles = []
+        dated = []
         for article in articles:
             headline = article.get("headline", "")
             if headline:
                 titles.append(headline)
+                # Finnhub returns "datetime" as Unix epoch
+                epoch = article.get("datetime")
+                pub_dt = None
+                if epoch:
+                    try:
+                        pub_dt = datetime.utcfromtimestamp(int(epoch))
+                    except (ValueError, TypeError, OSError):
+                        pass
+                dated.append(DatedArticle(title=headline, published_at=pub_dt))
 
         logger.info(f"{ticker}: Finnhub returned {len(titles)} articles")
 
@@ -67,5 +77,6 @@ class FinnhubProvider:
             ticker=ticker.upper(),
             name=company_name or "",
             news_titles=titles,
+            dated_articles=dated,
             data_sources=["finnhub"],
         )

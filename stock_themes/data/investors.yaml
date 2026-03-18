@@ -1,0 +1,77 @@
+# Famous investors tracked for 13F holdings analysis.
+# CIK numbers are from SEC EDGAR.
+investors:
+  - name: "Warren Buffett"
+    entity: "Berkshire Hathaway Inc"
+    cik: "0001067983"
+    short_name: "Buffett"
+
+  - name: "Cathie Wood"
+    entity: "ARK Investment Management LLC"
+    cik: "0001697748"
+    short_name: "ARK"
+
+  - name: "Stanley Druckenmiller"
+    entity: "Duquesne Family Office LLC"
+    cik: "0001536411"
+    short_name: "Druckenmiller"
+
+  - name: "Michael Burry"
+    entity: "Scion Asset Management LLC"
+    cik: "0001649339"
+    short_name: "Burry"
+
+  - name: "Bill Ackman"
+    entity: "Pershing Square Capital Management LP"
+    cik: "0001336528"
+    short_name: "Ackman"
+
+  - name: "Ray Dalio"
+    entity: "Bridgewater Associates LP"
+    cik: "0001350694"
+    short_name: "Dalio"
+
+  - name: "David Tepper"
+    entity: "Appaloosa Management LP"
+    cik: "0001656456"
+    short_name: "Tepper"
+
+  - name: "David Einhorn"
+    entity: "Greenlight Capital Inc"
+    cik: "0001079114"
+    short_name: "Einhorn"
+
+  - name: "Seth Klarman"
+    entity: "Baupost Group LLC"
+    cik: "0001061768"
+    short_name: "Klarman"
+
+  - name: "Dan Loeb"
+    entity: "Third Point LLC"
+    cik: "0001040273"
+    short_name: "Loeb"
+
+  - name: "Carl Icahn"
+    entity: "Icahn Capital LP"
+    cik: "0000921669"
+    short_name: "Icahn"
+
+  - name: "George Soros"
+    entity: "Soros Fund Management LLC"
+    cik: "0001029160"
+    short_name: "Soros"
+
+  - name: "Chase Coleman"
+    entity: "Tiger Global Management LLC"
+    cik: "0001167483"
+    short_name: "Tiger Global"
+
+  - name: "Philippe Laffont"
+    entity: "Coatue Management LLC"
+    cik: "0001535392"
+    short_name: "Coatue"
+
+  - name: "Terry Smith"
+    entity: "Fundsmith LLP"
+    cik: "0001569205"
+    short_name: "Fundsmith"

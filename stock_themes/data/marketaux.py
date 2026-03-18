@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import requests
 
@@ -11,7 +12,7 @@ from stock_themes.config import (
     MARKETAUX_API_URL, MARKETAUX_LIMIT, MARKETAUX_LANGUAGE,
 )
 from stock_themes.exceptions import ProviderError
-from stock_themes.models import CompanyProfile
+from stock_themes.models import CompanyProfile, DatedArticle
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +52,22 @@ class MarketAuxProvider:
 
         articles = data.get("data", [])
         titles = []
+        dated = []
         for article in articles:
             title = article.get("title", "")
             if title:
                 titles.append(title)
+                # MarketAux returns "published_at" as ISO 8601
+                pub_str = article.get("published_at", "")
+                pub_dt = None
+                if pub_str:
+                    try:
+                        pub_dt = datetime.fromisoformat(
+                            pub_str.replace("Z", "+00:00")
+                        ).replace(tzinfo=None)
+                    except (ValueError, TypeError):
+                        pass
+                dated.append(DatedArticle(title=title, published_at=pub_dt))
 
         logger.info(f"{ticker}: MarketAux returned {len(titles)} articles")
 
@@ -62,5 +75,6 @@ class MarketAuxProvider:
             ticker=ticker.upper(),
             name=company_name or "",
             news_titles=titles,
+            dated_articles=dated,
             data_sources=["marketaux"],
         )

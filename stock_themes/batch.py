@@ -77,9 +77,27 @@ def run_batch(
             f"max_tickers={max_tickers}: processing {len(tickers_to_process)} tickers this run"
         )
 
+    # Optionally load 13F investor holding changes (opt-in via settings)
+    investor_changes: dict = {}
+    try:
+        from stock_themes.config import THIRTEEN_F_ENABLED
+        if THIRTEEN_F_ENABLED:
+            from stock_themes.data.thirteen_f import ThirteenFProvider
+            tf_provider = ThirteenFProvider()
+            if tf_provider.is_available():
+                investor_changes = tf_provider.fetch_all_investors(db_path=db_path)
+                logger.info(f"13F: loaded holdings for {len(investor_changes)} tickers")
+    except ImportError:
+        logger.debug("13F provider not available — skipping")
+    except Exception as e:
+        logger.warning(f"13F loading failed (continuing without): {e}")
+
     # Set up pipeline and extractor (reuse across tickers)
     pipeline = DataPipeline()
-    extractor = EnsembleExtractor(use_llm=True, max_themes=max_themes_per_stock)
+    extractor = EnsembleExtractor(
+        use_llm=True, max_themes=max_themes_per_stock,
+        investor_changes=investor_changes or None,
+    )
 
     # Load or build corpus scorer for distinctiveness scoring
     corpus_scorer = None
@@ -160,6 +178,14 @@ def _process_single(
         scores = corpus_scorer.score_themes(ticker, theme_texts)
         for ot, score in zip(result.open_themes, scores):
             ot.distinctiveness = round(score, 3)
+
+    # Compute freshness score for open themes from dated articles
+    if profile.dated_articles and result.open_themes:
+        from stock_themes.extraction.time_decay import freshness_score
+        freshness = freshness_score(profile.dated_articles)
+        for ot in result.open_themes:
+            if ot.freshness is None:
+                ot.freshness = round(freshness, 3)
 
     # Save to database
     store.save_theme_result(result)

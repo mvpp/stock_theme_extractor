@@ -63,6 +63,13 @@ CREATE INDEX IF NOT EXISTS idx_social_ticker_date ON social_messages(ticker, col
 CREATE INDEX IF NOT EXISTS idx_open_themes_ticker ON open_themes(ticker);
 CREATE INDEX IF NOT EXISTS idx_open_themes_text ON open_themes(theme_text);
 CREATE INDEX IF NOT EXISTS idx_open_themes_confidence ON open_themes(confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_open_themes_source ON open_themes(source);
+"""
+
+# Migrations for existing databases (additive only — safe to re-run)
+MIGRATIONS_SQL = """
+-- Add freshness column to open_themes (time decay score at extraction time)
+ALTER TABLE open_themes ADD COLUMN freshness REAL DEFAULT NULL;
 """
 
 
@@ -73,5 +80,14 @@ def init_db(db_path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA_SQL)
+    # Run additive migrations (safe to re-run)
+    for statement in MIGRATIONS_SQL.strip().split(";"):
+        stmt = statement.strip()
+        if not stmt or stmt.startswith("--"):
+            continue
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
     return conn

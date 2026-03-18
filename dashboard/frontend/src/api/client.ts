@@ -28,6 +28,8 @@ export interface ThemeRanking {
   avg_confidence: number;
   momentum: number;
   regime: string;
+  regime_score: number | null;
+  regime_direction: string;
 }
 
 export interface StockInfo {
@@ -44,13 +46,19 @@ export interface ThemeDetail {
   total_market_cap: number;
   avg_confidence: number;
   regime: string;
+  regime_score: number | null;
+  regime_direction: string;
+  watch_status: string | null;
   regime_color: string;
   stocks: StockInfo[];
 }
 
 export interface RegimeInfo {
   theme_name: string;
-  regime: string;
+  regime_score: number;
+  regime_label: string;
+  regime_direction: string;
+  watch_status: string | null;
   color: string;
   signals: Record<string, number>;
 }
@@ -71,6 +79,49 @@ export interface HistoryPoint {
   total_market_cap: number | null;
   avg_confidence: number | null;
   news_mention_count: number;
+  regime_score: number | null;
+}
+
+export interface RegimeHistoryPoint {
+  snapshot_date: string;
+  regime_score: number;
+  regime_label: string;
+  regime_direction: string;
+  watch_status: string | null;
+}
+
+export interface ThemeTechnicals {
+  theme_name: string;
+  snapshot_date: string | null;
+  avg_ma20_distance_pct: number | null;
+  pct_above_ma20: number | null;
+  avg_volume_trend: number | null;
+  avg_analyst_upside_pct: number | null;
+  avg_positive_surprises: number | null;
+  stocks: {
+    ticker: string;
+    close_price: number | null;
+    ma20_distance_pct: number | null;
+    volume_trend: number | null;
+    analyst_target: number | null;
+    analyst_upside_pct: number | null;
+    positive_surprises: number | null;
+    gross_margin: number | null;
+    return_on_equity: number | null;
+    trailing_pe: number | null;
+    short_pct_of_float: number | null;
+    insider_buy_count: number | null;
+    insider_sell_count: number | null;
+  }[];
+}
+
+export interface DataFreshnessItem {
+  pipeline_name: string;
+  last_run: string | null;
+  status: string | null;
+  tickers_processed: number | null;
+  tickers_failed: number | null;
+  is_stale: boolean;
 }
 
 export interface SearchResults {
@@ -244,6 +295,10 @@ export const api = {
       get<StockChange>(`/themes/${encodeURIComponent(name)}/stock-changes?days=${days}`),
     tradeability: (name: string) =>
       get<TradeabilityScore>(`/themes/${encodeURIComponent(name)}/tradeability`),
+    regimeHistory: (name: string, days = 90) =>
+      get<RegimeHistoryPoint[]>(`/themes/${encodeURIComponent(name)}/regime-history?days=${days}`),
+    technicals: (name: string) =>
+      get<ThemeTechnicals>(`/themes/${encodeURIComponent(name)}/technicals`),
     emerging: (limit = 20) =>
       get<EmergingTheme[]>(`/themes/emerging?limit=${limit}`),
   },
@@ -291,6 +346,9 @@ export const api = {
 
   // Taxonomy
   taxonomy: () => get<TaxonomyNode[]>('/taxonomy/tree'),
+
+  // Data freshness
+  dataFreshness: () => get<DataFreshnessItem[]>('/data-freshness'),
 
   // Admin
   stats: () => get<Record<string, number>>('/stats'),

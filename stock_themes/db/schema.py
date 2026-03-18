@@ -131,6 +131,99 @@ CREATE TABLE IF NOT EXISTS investor_holdings (
 CREATE INDEX IF NOT EXISTS idx_investor_ticker ON investor_holdings(ticker);
 CREATE INDEX IF NOT EXISTS idx_investor_change ON investor_holdings(change_type);
 CREATE INDEX IF NOT EXISTS idx_open_themes_source_text ON open_themes(source, theme_text);
+
+-- Daily price data (rolling 60 trading days)
+CREATE TABLE IF NOT EXISTS stock_prices (
+    ticker TEXT NOT NULL,
+    price_date TEXT NOT NULL,
+    open REAL,
+    high REAL,
+    low REAL,
+    close REAL,
+    volume INTEGER,
+    PRIMARY KEY (ticker, price_date)
+);
+CREATE INDEX IF NOT EXISTS idx_sp_ticker ON stock_prices(ticker);
+CREATE INDEX IF NOT EXISTS idx_sp_date ON stock_prices(price_date);
+
+-- Per-stock technicals (upserted daily, one row per ticker)
+CREATE TABLE IF NOT EXISTS stock_technicals (
+    ticker TEXT PRIMARY KEY,
+    price_date TEXT NOT NULL,
+    close_price REAL,
+    ma20 REAL,
+    ma20_distance_pct REAL,
+    volume_20d_avg INTEGER,
+    volume_trend REAL,
+    analyst_target REAL,
+    analyst_upside_pct REAL,
+    analyst_count INTEGER,
+    recommendation_mean REAL,
+    positive_surprises INTEGER,
+    gross_margin REAL,
+    operating_margin REAL,
+    profit_margin REAL,
+    return_on_equity REAL,
+    return_on_assets REAL,
+    debt_to_equity REAL,
+    current_ratio REAL,
+    free_cashflow REAL,
+    operating_cashflow REAL,
+    trailing_pe REAL,
+    forward_pe REAL,
+    peg_ratio REAL,
+    beta REAL,
+    dividend_yield REAL,
+    earnings_growth REAL,
+    revenue_growth REAL,
+    trailing_eps REAL,
+    forward_eps REAL,
+    held_pct_institutions REAL,
+    short_pct_of_float REAL,
+    short_ratio REAL,
+    insider_buy_count INTEGER,
+    insider_sell_count INTEGER,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Theme-level aggregated technicals per day
+CREATE TABLE IF NOT EXISTS theme_technicals (
+    theme_name TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    avg_ma20_distance_pct REAL,
+    pct_above_ma20 REAL,
+    avg_volume_trend REAL,
+    avg_analyst_upside_pct REAL,
+    avg_positive_surprises REAL,
+    PRIMARY KEY (theme_name, snapshot_date)
+);
+
+-- Regime scores with upgrade/downgrade hysteresis
+CREATE TABLE IF NOT EXISTS regime_scores (
+    theme_name TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    regime_score REAL NOT NULL,
+    regime_label TEXT NOT NULL,
+    regime_direction TEXT NOT NULL,
+    watch_status TEXT,
+    watch_since TEXT,
+    signal_components TEXT,
+    PRIMARY KEY (theme_name, snapshot_date)
+);
+CREATE INDEX IF NOT EXISTS idx_rs_theme ON regime_scores(theme_name);
+CREATE INDEX IF NOT EXISTS idx_rs_date ON regime_scores(snapshot_date);
+
+-- Pipeline run tracking for data freshness
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+    pipeline_name TEXT NOT NULL,
+    run_date TEXT NOT NULL,
+    status TEXT NOT NULL,
+    tickers_processed INTEGER,
+    tickers_failed INTEGER,
+    error_message TEXT,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (pipeline_name, run_date)
+);
 """
 
 

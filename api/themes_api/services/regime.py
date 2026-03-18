@@ -1,6 +1,10 @@
-"""Theme lifecycle regime classification.
+"""Theme lifecycle regime — reads from precomputed regime_scores table.
 
 Regimes: Emergence → Diffusion → Consensus → Monetization → Decay
+
+The regime score (0-100) is computed by scripts/score_regimes.py with
+upgrade/downgrade hysteresis.  This module provides read access and
+a fallback raw-score computation for themes without stored scores.
 """
 
 from __future__ import annotations
@@ -8,20 +12,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-
-
-@dataclass
-class RegimeSignals:
-    """Computed signals used to classify a theme's lifecycle regime."""
-    theme_name: str
-    stock_count: int = 0
-    stock_count_velocity: float = 0.0
-    confidence_trend: float = 0.0
-    news_trend: float = 0.0
-    news_density: int = 0
-    source_diversity: int = 0
-    days_since_first_seen: int = 999
-    avg_confidence: float = 0.0
 
 
 REGIME_COLORS = {
@@ -33,121 +23,135 @@ REGIME_COLORS = {
 }
 
 
-def classify_regime(signals: RegimeSignals) -> str:
-    """Classify a theme into a lifecycle regime based on computed signals."""
-    if signals.days_since_first_seen < 30:
-        return "emergence"
-    if signals.stock_count <= 5 and signals.stock_count_velocity > 0:
-        return "emergence"
-
-    if (signals.stock_count_velocity < -0.01
-            and signals.confidence_trend < -0.001
-            and signals.news_trend < 0):
-        return "decay"
-
-    if (signals.stock_count > 15
-            and signals.avg_confidence > 0.7
-            and abs(signals.stock_count_velocity) < 0.05):
-        return "monetization"
-
-    if (signals.stock_count > 20
-            and signals.source_diversity >= 3):
-        return "consensus"
-
-    if (signals.stock_count_velocity > 0
-            and signals.confidence_trend >= 0
-            and 5 < signals.stock_count <= 20):
-        return "diffusion"
-
-    return "diffusion"
+@dataclass
+class RegimeResult:
+    theme_name: str
+    regime_score: float
+    regime_label: str
+    regime_direction: str
+    watch_status: str | None
+    color: str
+    signals: dict
+    raw_score: float | None = None
 
 
-def compute_signals(conn: sqlite3.Connection, theme_name: str,
-                    lookback_days: int = 90) -> RegimeSignals:
-    """Compute regime signals for a single theme from snapshot history."""
-    snaps = conn.execute(
-        """SELECT snapshot_date, stock_count, avg_confidence,
-                  news_mention_count, source_breakdown
-           FROM theme_snapshots
-           WHERE theme_name = ? AND snapshot_date >= date('now', ?)
-           ORDER BY snapshot_date""",
-        (theme_name, f"-{lookback_days} days"),
-    ).fetchall()
+def get_regime(conn: sqlite3.Connection, theme_name: str) -> RegimeResult:
+    """Get the latest regime score for a theme.
 
-    signals = RegimeSignals(theme_name=theme_name)
-
-    if not snaps:
-        cur = conn.execute(
-            """SELECT COUNT(*) AS cnt, AVG(st.confidence) AS avg_conf
-               FROM stock_themes st
-               JOIN themes t ON t.id = st.theme_id
-               WHERE t.name = ?""",
-            (theme_name,),
-        ).fetchone()
-        if cur:
-            signals.stock_count = cur["cnt"]
-            signals.avg_confidence = cur["avg_conf"] or 0.0
-        return signals
-
-    latest = snaps[-1]
-    signals.stock_count = latest["stock_count"]
-    signals.avg_confidence = latest["avg_confidence"] or 0.0
-    signals.news_density = latest["news_mention_count"] or 0
-
-    try:
-        breakdown = json.loads(latest["source_breakdown"] or "{}")
-        signals.source_diversity = len(breakdown)
-    except (json.JSONDecodeError, TypeError):
-        signals.source_diversity = 1
-
-    first = conn.execute(
-        "SELECT MIN(snapshot_date) AS first_date FROM theme_snapshots WHERE theme_name = ?",
+    Reads from regime_scores table.  Falls back to a simple on-the-fly
+    computation if no stored score exists (e.g. brand-new theme).
+    """
+    row = conn.execute(
+        """SELECT regime_score, regime_label, regime_direction,
+                  watch_status, signal_components
+           FROM regime_scores
+           WHERE theme_name = ?
+           ORDER BY snapshot_date DESC LIMIT 1""",
         (theme_name,),
     ).fetchone()
-    if first and first["first_date"]:
-        from datetime import date
-        first_date = date.fromisoformat(first["first_date"])
-        signals.days_since_first_seen = (date.today() - first_date).days
 
-    if len(snaps) >= 2:
-        counts = [s["stock_count"] for s in snaps]
-        confs = [s["avg_confidence"] or 0 for s in snaps]
-        signals.stock_count_velocity = _slope(counts)
-        signals.confidence_trend = _slope(confs)
+    if row:
+        signals = {}
+        try:
+            signals = json.loads(row["signal_components"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            pass
 
-    if len(snaps) >= 4:
-        mid = len(snaps) // 2
-        recent_news = sum((s["news_mention_count"] or 0) for s in snaps[mid:])
-        earlier_news = sum((s["news_mention_count"] or 0) for s in snaps[:mid])
-        signals.news_trend = recent_news - earlier_news
+        label = row["regime_label"]
+        return RegimeResult(
+            theme_name=theme_name,
+            regime_score=row["regime_score"],
+            regime_label=label,
+            regime_direction=row["regime_direction"],
+            watch_status=row["watch_status"],
+            color=REGIME_COLORS.get(label, "#6b7280"),
+            signals=signals,
+        )
 
-    return signals
+    # Fallback: compute raw score on the fly (no hysteresis)
+    return _fallback_regime(conn, theme_name)
 
 
-def classify_regime_batch(conn: sqlite3.Connection,
-                          lookback_days: int = 90) -> dict[str, str]:
-    """Classify regimes for all themes with snapshots."""
-    themes = conn.execute(
-        "SELECT DISTINCT theme_name FROM theme_snapshots"
+def get_regime_batch(conn: sqlite3.Connection) -> dict[str, RegimeResult]:
+    """Get latest regime for all themes that have stored scores."""
+    rows = conn.execute(
+        """SELECT rs.theme_name, rs.regime_score, rs.regime_label,
+                  rs.regime_direction, rs.watch_status, rs.signal_components
+           FROM regime_scores rs
+           INNER JOIN (
+               SELECT theme_name, MAX(snapshot_date) AS max_date
+               FROM regime_scores GROUP BY theme_name
+           ) latest ON rs.theme_name = latest.theme_name
+                    AND rs.snapshot_date = latest.max_date"""
     ).fetchall()
 
     result = {}
-    for row in themes:
-        name = row["theme_name"]
-        signals = compute_signals(conn, name, lookback_days)
-        result[name] = classify_regime(signals)
+    for row in rows:
+        label = row["regime_label"]
+        signals = {}
+        try:
+            signals = json.loads(row["signal_components"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+        result[row["theme_name"]] = RegimeResult(
+            theme_name=row["theme_name"],
+            regime_score=row["regime_score"],
+            regime_label=label,
+            regime_direction=row["regime_direction"],
+            watch_status=row["watch_status"],
+            color=REGIME_COLORS.get(label, "#6b7280"),
+            signals=signals,
+        )
     return result
 
 
-def _slope(values: list[float]) -> float:
-    """Simple linear regression slope."""
-    n = len(values)
-    if n < 2:
-        return 0.0
-    xs = list(range(n))
-    sum_x = sum(xs)
-    sum_y = sum(values)
-    sum_xy = sum(x * y for x, y in zip(xs, values))
-    sum_xx = sum(x * x for x in xs)
-    denom = n * sum_xx - sum_x ** 2
-    return (n * sum_xy - sum_x * sum_y) / denom if denom else 0.0
+def get_regime_history(conn: sqlite3.Connection, theme_name: str,
+                       days: int = 90) -> list[dict]:
+    """Return regime score time series for charting."""
+    rows = conn.execute(
+        """SELECT snapshot_date, regime_score, regime_label,
+                  regime_direction, watch_status
+           FROM regime_scores
+           WHERE theme_name = ? AND snapshot_date >= date('now', ?)
+           ORDER BY snapshot_date""",
+        (theme_name, f"-{days} days"),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _fallback_regime(conn: sqlite3.Connection, theme_name: str) -> RegimeResult:
+    """Simple fallback for themes without stored regime_scores."""
+    cur = conn.execute(
+        """SELECT COUNT(*) AS cnt, AVG(st.confidence) AS avg_conf
+           FROM stock_themes st
+           JOIN themes t ON t.id = st.theme_id
+           WHERE t.name = ?""",
+        (theme_name,),
+    ).fetchone()
+
+    stock_count = cur["cnt"] if cur else 0
+    avg_conf = cur["avg_conf"] or 0.0 if cur else 0.0
+
+    # Very rough estimate based on available data
+    score = min(stock_count / 25, 1) * 50 + avg_conf * 50
+    score = max(0, min(100, score))
+    label = _score_to_label(score)
+
+    return RegimeResult(
+        theme_name=theme_name,
+        regime_score=round(score, 2),
+        regime_label=label,
+        regime_direction="stable",
+        watch_status=None,
+        color=REGIME_COLORS.get(label, "#6b7280"),
+        signals={"stock_count": stock_count, "confidence": round(avg_conf * 100, 2)},
+    )
+
+
+def _score_to_label(score: float) -> str:
+    boundaries = [20, 40, 60, 80]
+    labels = ["emergence", "diffusion", "consensus", "monetization", "decay"]
+    for i, b in enumerate(boundaries):
+        if score < b:
+            return labels[i]
+    return labels[-1]

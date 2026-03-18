@@ -63,10 +63,11 @@ def get_top_themes(
         for info in current_map.values():
             info["momentum"] = 0.0
 
-    regime_map = _get_latest_regimes(conn, lookback_days)
+    regime_map = _get_latest_regimes(conn)
 
     results = []
     for name, info in current_map.items():
+        regime = regime_map.get(name)
         results.append({
             "theme_name": name,
             "category": info["category"],
@@ -74,7 +75,9 @@ def get_top_themes(
             "total_market_cap": info["total_market_cap"] or 0,
             "avg_confidence": info["avg_confidence"],
             "momentum": info["momentum"],
-            "regime": regime_map.get(name, "diffusion"),
+            "regime": regime.regime_label if regime else "diffusion",
+            "regime_score": regime.regime_score if regime else None,
+            "regime_direction": regime.regime_direction if regime else "stable",
         })
 
     sort_key = {
@@ -88,6 +91,6 @@ def get_top_themes(
     return results[:limit]
 
 
-def _get_latest_regimes(conn: sqlite3.Connection, lookback_days: int) -> dict[str, str]:
-    from themes_api.services.regime import classify_regime_batch
-    return classify_regime_batch(conn, lookback_days)
+def _get_latest_regimes(conn: sqlite3.Connection) -> dict:
+    from themes_api.services.regime import get_regime_batch
+    return get_regime_batch(conn)

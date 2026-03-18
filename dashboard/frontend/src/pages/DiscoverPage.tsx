@@ -185,6 +185,7 @@ export default function DiscoverPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-text-muted uppercase">#</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-text-muted uppercase">Theme</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-text-muted uppercase">Regime</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-text-muted uppercase">Score</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-text-muted uppercase">Stocks</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-text-muted uppercase">Mkt Cap</th>
                     </tr>
@@ -199,7 +200,12 @@ export default function DiscoverPage() {
                             {t.theme_name}
                           </Link>
                         </td>
-                        <td className="px-3 py-2"><RegimeBadge regime={t.regime} /></td>
+                        <td className="px-3 py-2">
+                          <RegimeBadge regime={t.regime} direction={t.regime_direction} />
+                        </td>
+                        <td className="px-3 py-2 text-sm text-right text-text-muted">
+                          {t.regime_score != null ? Math.round(t.regime_score) : '-'}
+                        </td>
                         <td className="px-3 py-2 text-sm text-right text-text-secondary">{t.stock_count}</td>
                         <td className="px-3 py-2 text-sm text-right text-text-secondary">{fmt(t.total_market_cap)}</td>
                       </tr>

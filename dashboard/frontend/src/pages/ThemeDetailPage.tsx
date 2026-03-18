@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../api/client'
-import type { ThemeDetail, HistoryPoint, DriftInfo, TradeabilityScore, OpenVariant, StockChange } from '../api/client'
+import type { ThemeDetail, HistoryPoint, DriftInfo, TradeabilityScore, OpenVariant, StockChange, RegimeHistoryPoint, ThemeTechnicals } from '../api/client'
 import RegimeBadge from '../components/RegimeBadge'
+import RegimeScoreGauge from '../components/RegimeScoreGauge'
+import RegimeHistoryChart from '../components/RegimeHistoryChart'
 import TradeabilityGauge from '../components/TradeabilityGauge'
 import SourceBadge from '../components/SourceBadge'
 
@@ -29,6 +31,8 @@ export default function ThemeDetailPage() {
   const [tradeability, setTradeability] = useState<TradeabilityScore | null>(null)
   const [openVariants, setOpenVariants] = useState<OpenVariant[]>([])
   const [stockChanges, setStockChanges] = useState<StockChange | null>(null)
+  const [regimeHistory, setRegimeHistory] = useState<RegimeHistoryPoint[]>([])
+  const [technicals, setTechnicals] = useState<ThemeTechnicals | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -41,13 +45,17 @@ export default function ThemeDetailPage() {
       api.themes.tradeability(name),
       api.themes.openVariants(name),
       api.themes.stockChanges(name, 30),
-    ]).then(([d, h, dr, tr, ov, sc]) => {
+      api.themes.regimeHistory(name).catch(() => []),
+      api.themes.technicals(name).catch(() => null),
+    ]).then(([d, h, dr, tr, ov, sc, rh, tech]) => {
       setDetail(d)
       setHistory(h)
       setDrift(dr)
       setTradeability(tr)
       setOpenVariants(ov)
       setStockChanges(sc)
+      setRegimeHistory(rh)
+      setTechnicals(tech)
     }).finally(() => setLoading(false))
   }, [name])
 
@@ -61,7 +69,8 @@ export default function ThemeDetailPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <h1 className="text-2xl font-bold text-text-primary capitalize">{detail.theme_name}</h1>
-        <RegimeBadge regime={detail.regime} />
+        <RegimeBadge regime={detail.regime} score={detail.regime_score}
+          direction={detail.regime_direction} watchStatus={detail.watch_status} />
         {tradeability && (
           <span className="ml-auto text-sm text-text-muted">
             Tradeability: <span className="text-lg font-bold text-accent">{Math.round(tradeability.tradeability_score * 100)}</span>
@@ -83,6 +92,49 @@ export default function ThemeDetailPage() {
           </div>
         ))}
       </div>
+
+      {/* Regime Gauge + Technicals */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {detail.regime_score != null && (
+          <div className="bg-card rounded-lg border border-border p-4">
+            <h3 className="text-sm font-medium text-text-secondary mb-2">Regime Score</h3>
+            <RegimeScoreGauge
+              score={detail.regime_score}
+              label={detail.regime}
+              direction={detail.regime_direction}
+              watchStatus={detail.watch_status}
+            />
+          </div>
+        )}
+
+        {technicals && (
+          <div className="bg-card rounded-lg border border-border p-4">
+            <h3 className="text-sm font-medium text-text-secondary mb-3">Theme Technicals</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Avg MA20 Distance', value: technicals.avg_ma20_distance_pct != null ? `${technicals.avg_ma20_distance_pct > 0 ? '+' : ''}${technicals.avg_ma20_distance_pct.toFixed(1)}%` : '-' },
+                { label: 'Stocks Above MA20', value: technicals.pct_above_ma20 != null ? `${(technicals.pct_above_ma20 * 100).toFixed(0)}%` : '-' },
+                { label: 'Volume Trend', value: technicals.avg_volume_trend != null ? technicals.avg_volume_trend.toFixed(3) : '-' },
+                { label: 'Analyst Upside', value: technicals.avg_analyst_upside_pct != null ? `${technicals.avg_analyst_upside_pct > 0 ? '+' : ''}${technicals.avg_analyst_upside_pct.toFixed(1)}%` : '-' },
+                { label: 'Earnings Surprises', value: technicals.avg_positive_surprises != null ? `${technicals.avg_positive_surprises.toFixed(1)} / 4` : '-' },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div className="text-xs text-text-muted">{label}</div>
+                  <div className="text-sm font-semibold text-text-primary">{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Regime History Chart */}
+      {regimeHistory.length > 0 && (
+        <div className="bg-card rounded-lg border border-border p-4">
+          <h2 className="text-sm font-medium text-text-secondary mb-3">Regime Score Over Time</h2>
+          <RegimeHistoryChart data={regimeHistory} />
+        </div>
+      )}
 
       {/* Tradeability Gauge + Recent Changes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

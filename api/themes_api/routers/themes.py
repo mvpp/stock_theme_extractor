@@ -11,7 +11,7 @@ from themes_api.db import (
     get_emerging_ranked,
 )
 from themes_api.services.ranking import get_top_themes
-from themes_api.services.regime import REGIME_COLORS, compute_signals, classify_regime
+from themes_api.services.regime import REGIME_COLORS, get_regime, get_regime_history
 from themes_api.services.drift import compute_drift
 from themes_api.services.tradeability import compute_tradeability
 
@@ -44,8 +44,7 @@ def theme_detail(theme_name: str):
     total_mkt_cap = sum(s.get("market_cap") or 0 for s in stocks)
     avg_conf = sum(s["confidence"] for s in stocks) / len(stocks) if stocks else 0
 
-    signals = compute_signals(conn, theme_name)
-    regime = classify_regime(signals)
+    regime = get_regime(conn, theme_name)
     conn.close()
 
     return {
@@ -53,8 +52,11 @@ def theme_detail(theme_name: str):
         "stock_count": len(stocks),
         "total_market_cap": total_mkt_cap,
         "avg_confidence": round(avg_conf, 4),
-        "regime": regime,
-        "regime_color": REGIME_COLORS.get(regime, "#6b7280"),
+        "regime": regime.regime_label,
+        "regime_score": regime.regime_score,
+        "regime_direction": regime.regime_direction,
+        "watch_status": regime.watch_status,
+        "regime_color": regime.color,
         "stocks": stocks,
     }
 
@@ -62,25 +64,28 @@ def theme_detail(theme_name: str):
 @router.get("/{theme_name}/regime")
 def theme_regime(theme_name: str):
     conn = init_db(config.DB_PATH)
-    signals = compute_signals(conn, theme_name)
-    regime = classify_regime(signals)
+    regime = get_regime(conn, theme_name)
     conn.close()
 
     return {
         "theme_name": theme_name,
-        "regime": regime,
-        "color": REGIME_COLORS.get(regime, "#6b7280"),
-        "signals": {
-            "stock_count": signals.stock_count,
-            "stock_count_velocity": round(signals.stock_count_velocity, 4),
-            "confidence_trend": round(signals.confidence_trend, 6),
-            "news_trend": signals.news_trend,
-            "news_density": signals.news_density,
-            "source_diversity": signals.source_diversity,
-            "days_since_first_seen": signals.days_since_first_seen,
-            "avg_confidence": round(signals.avg_confidence, 4),
-        },
+        "regime_score": regime.regime_score,
+        "regime_label": regime.regime_label,
+        "regime_direction": regime.regime_direction,
+        "watch_status": regime.watch_status,
+        "color": regime.color,
+        "signals": regime.signals,
     }
+
+
+@router.get("/{theme_name}/regime-history")
+def regime_history(theme_name: str, days: int = Query(90, ge=7, le=365)):
+    """Regime score time series for charting."""
+    conn = init_db(config.DB_PATH)
+    try:
+        return get_regime_history(conn, theme_name, days)
+    finally:
+        conn.close()
 
 
 @router.get("/{theme_name}/drift")
@@ -118,15 +123,60 @@ def tradeability(theme_name: str):
         conn.close()
 
 
+@router.get("/{theme_name}/technicals")
+def theme_technicals(theme_name: str):
+    """Theme-level + per-stock technicals."""
+    conn = init_db(config.DB_PATH)
+    try:
+        tech = conn.execute(
+            """SELECT avg_ma20_distance_pct, pct_above_ma20, avg_volume_trend,
+                      avg_analyst_upside_pct, avg_positive_surprises, snapshot_date
+               FROM theme_technicals
+               WHERE theme_name = ?
+               ORDER BY snapshot_date DESC LIMIT 1""",
+            (theme_name,),
+        ).fetchone()
+
+        stock_rows = conn.execute(
+            """SELECT st_tech.ticker, st_tech.close_price, st_tech.ma20_distance_pct,
+                      st_tech.volume_trend, st_tech.analyst_target, st_tech.analyst_upside_pct,
+                      st_tech.positive_surprises, st_tech.gross_margin, st_tech.return_on_equity,
+                      st_tech.trailing_pe, st_tech.short_pct_of_float,
+                      st_tech.insider_buy_count, st_tech.insider_sell_count
+               FROM stock_technicals st_tech
+               JOIN stock_themes sth ON sth.ticker = st_tech.ticker
+               JOIN themes t ON t.id = sth.theme_id
+               WHERE t.name = ?
+               ORDER BY st_tech.close_price DESC""",
+            (theme_name,),
+        ).fetchall()
+
+        return {
+            "theme_name": theme_name,
+            "snapshot_date": tech["snapshot_date"] if tech else None,
+            "avg_ma20_distance_pct": tech["avg_ma20_distance_pct"] if tech else None,
+            "pct_above_ma20": tech["pct_above_ma20"] if tech else None,
+            "avg_volume_trend": tech["avg_volume_trend"] if tech else None,
+            "avg_analyst_upside_pct": tech["avg_analyst_upside_pct"] if tech else None,
+            "avg_positive_surprises": tech["avg_positive_surprises"] if tech else None,
+            "stocks": [dict(r) for r in stock_rows],
+        }
+    finally:
+        conn.close()
+
+
 @router.get("/{theme_name}/history")
 def theme_history(theme_name: str, days: int = Query(90, ge=7, le=365)):
     conn = init_db(config.DB_PATH)
     rows = conn.execute(
-        """SELECT snapshot_date, stock_count, total_market_cap,
-                  avg_confidence, news_mention_count
-           FROM theme_snapshots
-           WHERE theme_name = ? AND snapshot_date >= date('now', ?)
-           ORDER BY snapshot_date""",
+        """SELECT ts.snapshot_date, ts.stock_count, ts.total_market_cap,
+                  ts.avg_confidence, ts.news_mention_count,
+                  rs.regime_score
+           FROM theme_snapshots ts
+           LEFT JOIN regime_scores rs
+             ON rs.theme_name = ts.theme_name AND rs.snapshot_date = ts.snapshot_date
+           WHERE ts.theme_name = ? AND ts.snapshot_date >= date('now', ?)
+           ORDER BY ts.snapshot_date""",
         (theme_name, f"-{days} days"),
     ).fetchall()
     conn.close()

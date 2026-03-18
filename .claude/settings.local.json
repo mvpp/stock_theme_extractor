@@ -32,7 +32,8 @@
       "Bash(curl -s 'http://localhost:8000/api/v1/narratives')",
       "mcp__Claude_Preview__preview_start",
       "Bash(curl -s 'http://localhost:8000/api/v1/themes/artificial%20intelligence/tradeability')",
-      "Bash(curl -s 'http://localhost:8000/api/v1/stocks/NVDA')"
+      "Bash(curl -s 'http://localhost:8000/api/v1/stocks/NVDA')",
+      "Bash(ls -la /Users/xihanliu/Programs/stock_themes/stock_themes/extraction/*.py)"
     ]
   }
 }

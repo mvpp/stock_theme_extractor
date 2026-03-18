@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import SearchBar from './SearchBar'
+import DataFreshnessBanner from './DataFreshnessBanner'
 
 const NAV = [
   { path: '/', label: 'Discover' },
@@ -15,6 +16,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-surface">
+      <DataFreshnessBanner />
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">

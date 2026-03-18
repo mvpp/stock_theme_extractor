@@ -17,6 +17,7 @@ from themes_api.routers import (
     discover,
     narratives,
     screener,
+    freshness,
 )
 
 
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(discover.router, prefix="/api/v1", tags=["discover"])
     app.include_router(narratives.router, prefix="/api/v1", tags=["narratives"])
     app.include_router(screener.router, prefix="/api/v1", tags=["screener"])
+    app.include_router(freshness.router, prefix="/api/v1", tags=["freshness"])
 
     return app
 

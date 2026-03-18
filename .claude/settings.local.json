@@ -16,7 +16,9 @@
       "Bash(.venv/bin/python -m py_compile stock_themes/db/store.py)",
       "Bash(.venv/bin/python -m py_compile stock_themes/db/queries.py)",
       "Bash(.venv/bin/python -m py_compile scripts/suggest_taxonomy.py)",
-      "Bash(find /Users/xihanliu/Programs/stock_themes -type d -not -path */.* -not -path */__pycache__* -not -path *.egg-info* -not -path .venv*)"
+      "Bash(find /Users/xihanliu/Programs/stock_themes -type d -not -path */.* -not -path */__pycache__* -not -path *.egg-info* -not -path .venv*)",
+      "Bash(find /Users/xihanliu/Programs/stock_themes -type f -name *.html -o -name *.jsx -o -name *.tsx -o -name *.vue -o -name *.svelte)",
+      "Bash(find /Users/xihanliu/Programs/stock_themes/ -name *.db -type f)"
     ]
   }
 }

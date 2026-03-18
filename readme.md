@@ -15,71 +15,73 @@ Both tiers are combined via a **unified query layer** with quality filtering, so
 
 ```mermaid
 flowchart TB
-    subgraph DATA["Data Pipeline (per ticker)"]
-        direction TB
-        subgraph PASS1["Pass 1 — Core"]
-            Yahoo["Yahoo Finance<br/><small>sector, industry, mkt cap</small>"]
-            SEC["SEC EDGAR<br/><small>10-K: Item 1 / 1A / 7</small>"]
-        end
-        subgraph PASS2["Pass 2 — Enrichment"]
-            Finnhub["Finnhub<br/><small>news headlines</small>"]
-            GDELT["GDELT<br/><small>news themes</small>"]
-            MarketAux["MarketAux<br/><small>news headlines</small>"]
-            CompanyWeb["Company Website<br/><small>press releases</small>"]
-            Patents["PatentsView<br/><small>patent titles</small>"]
-            StockTwits["StockTwits<br/><small>social text</small>"]
-        end
-        PASS1 -->|"company name"| PASS2
+    %% Definitions
+    subgraph Features ["✨ Key Features"]
+        direction LR
+        F1("📊 Dual Theme Output<br/>(Canonical & Open)")
+        F2("🧠 LLM-Powered<br/>Extraction")
+        F3("⚖️ Quality & TF-IDF<br/>Scoring")
+        F4("🔍 Unified Semantic<br/>Query Layer")
+        F1 ~~~ F2 ~~~ F3 ~~~ F4
     end
 
-    subgraph EXTRACT["Theme Extraction"]
-        direction TB
-        subgraph LAYER1["Layer 1 — LLM Discovery"]
-            LLM["LLM extracts themes<br/><small>from SEC text</small>"]
-            MAP["Map to taxonomy<br/><small>alias → embedding</small>"]
-            LLM --> MAP
+    subgraph Architecture ["🏗️ System Architecture Pipeline"]
+        direction LR
+        
+        subgraph Data ["1. Data Ingestion"]
+            direction TB
+            D1[("Core Data<br/>(Yahoo, SEC 10-K)")]
+            D2[("Enrichment<br/>(News, Social, Patents)")]
+            D1 -->|"Pass 1 triggers Pass 2"| D2
         end
-        subgraph LAYER2["Layer 2 — BM25 Scoring"]
-            TFIDF["TF-IDF distinctiveness<br/><small>corpus-wide scoring</small>"]
+
+        subgraph Extract ["2. Theme Extraction"]
+            direction TB
+            E1["LLM Discovery<br/>(SEC Text)"]
+            E2["Narrative Analysis<br/>(News Headlines)"]
+            E3["Rule & Regex<br/>(SIC, Patents)"]
+            E1 & E2 & E3 --> Map["Taxonomy Mapping &<br/>BM25/TF-IDF Scoring"]
         end
-        subgraph LAYER3["Layer 3 — Narratives"]
-            NAR["Narrative LLM call<br/><small>on news headlines</small>"]
+
+        subgraph Process ["3. Post-Processing"]
+            direction TB
+            P1["Time Decay<br/>(Freshness)"]
+            P2["13F Investor Data<br/>(Optional)"]
+            P3["Ensemble Merger<br/>(Weighted Avg)"]
+            P1 & P2 --> P3
         end
-        subgraph EXTRA["Additional Extractors"]
-            SIC["SIC Mapper"]
-            KW["Keyword Regex"]
-            PAT["Patent Mapper"]
-            EMB["Embedding Matcher"]
-            NEWS["News Extractor"]
-            SOC["Social Extractor"]
+
+        subgraph Output ["4. Output & Storage"]
+            direction TB
+            O1["Canonical Themes<br/>(~200 taxonomy)"]
+            O2["Open Themes<br/>(Free-form)"]
+            O1 & O2 --> O3{"Unified Query Layer<br/>(Semantic Bridging)"}
+            O3 --> O4[("SQLite Database")]
         end
+
+        Data ===> Extract ===> Process ===> Output
     end
 
-    subgraph MODIFIERS["Post-Processing"]
-        DECAY["Time Decay<br/><small>half-cosine freshness</small>"]
-        INV["13F Investor Themes<br/><small>optional addon</small>"]
-        ENS["Ensemble Merger<br/><small>weighted avg + family pooling</small>"]
-    end
+    %% Link Features to Architecture conceptually
+    Features -.- Architecture
 
-    subgraph OUTPUT["Output"]
-        CAN["Canonical Themes<br/><small>~200 taxonomy, top 10/stock</small>"]
-        OPEN["Open Themes<br/><small>free-form + narrative + 13F</small>"]
-        UNI["Unified Query Layer<br/><small>quality filtering + bridging</small>"]
-        DB[("SQLite DB")]
-        CAN --> UNI
-        OPEN --> UNI
-        UNI --> DB
-    end
-
-    DATA --> EXTRACT
-    EXTRACT --> MODIFIERS
-    MODIFIERS --> OUTPUT
-
-    style DATA fill:#e8f4f8,stroke:#2196F3
-    style EXTRACT fill:#fff3e0,stroke:#FF9800
-    style MODIFIERS fill:#f3e5f5,stroke:#9C27B0
-    style OUTPUT fill:#e8f5e9,stroke:#4CAF50
-    style INV stroke:#9C27B0,stroke-dasharray: 5 5
+    %% Styling
+    style Features fill:#fdfbf7,stroke:#9ca3af,stroke-width:2px,stroke-dasharray: 5 5
+    style Architecture fill:#ffffff,stroke:#3b82f6,stroke-width:2px
+    
+    style D1 fill:#e0f2fe,stroke:#0284c7,stroke-width:1px
+    style D2 fill:#e0f2fe,stroke:#0284c7,stroke-width:1px
+    style E1 fill:#fef08a,stroke:#ca8a04,stroke-width:1px
+    style E2 fill:#fef08a,stroke:#ca8a04,stroke-width:1px
+    style E3 fill:#fef08a,stroke:#ca8a04,stroke-width:1px
+    style Map fill:#fef08a,stroke:#ca8a04,stroke-width:1px
+    style P1 fill:#f3e8ff,stroke:#9333ea,stroke-width:1px
+    style P2 fill:#f3e8ff,stroke:#9333ea,stroke-width:1px
+    style P3 fill:#f3e8ff,stroke:#9333ea,stroke-width:1px
+    style O1 fill:#dcfce7,stroke:#16a34a,stroke-width:1px
+    style O2 fill:#dcfce7,stroke:#16a34a,stroke-width:1px
+    style O3 fill:#dcfce7,stroke:#16a34a,stroke-width:1px
+    style O4 fill:#dcfce7,stroke:#16a34a,stroke-width:1px
 ```
 
 ### Data Pipeline (per ticker, two-pass)
